@@ -1,0 +1,10 @@
+/config.php
+/storage/private/*
+/storage/media/*
+/storage/logs/*
+/storage/cache/*
+/storage/*.sqlite
+!/storage/**/.gitkeep
+/migration/downloads/
+/vendor/
+.DS_Store
