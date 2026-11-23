@@ -9,3 +9,4 @@
 /migration/downloads/
 /vendor/
 .DS_Store
+/storage/import.lock
