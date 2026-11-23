@@ -79,4 +79,15 @@ $r->post('/admin/reglages', [AdminSettingsController::class, 'save']);
 $r->post('/contact/envoyer', [ContactController::class, 'submit']);
 $r->get('/media/{id}/{name}', [MediaController::class, 'serve']);
 $r->get('/sitemap.xml', [PageController::class, 'sitemap']);
+// Anciens liens de fichiers Jimdo (/app/download/123/nom.pdf) -> média importé
+$r->get('/app/download/{jid}/{name*}', function (string $jid, string $name): void {
+    $m = App\Db::one('SELECT id FROM media WHERE legacy_url LIKE ? ORDER BY id LIMIT 1', ['%/app/download/' . $jid . '/%']);
+    $u = $m ? App\Media::url((int) $m['id']) : '';
+    if ($u === '') {
+        http_response_code(404);
+        echo App\View::render('public/error', ['code' => 404, 'message' => 'Document introuvable.']);
+        return;
+    }
+    redirect($u, 301);
+});
 $r->get('/{path*}', [PageController::class, 'show']);

@@ -80,11 +80,17 @@ final class Auth
     {
         $since = gmdate('Y-m-d H:i:s', time() - 900);
         $max = (int) Config::get('security.max_login_attempts', 5);
-        $n = (int) Db::value(
-            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND (ip = ? OR email = ?)',
-            [$since, client_ip(), mb_strtolower($email)]
+        // Par compte: $max essais / 15 min. Par IP: plafond plus large, car plusieurs
+        // membres peuvent se connecter depuis le même réseau (administration communale).
+        $byEmail = (int) Db::value(
+            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND email = ?',
+            [$since, mb_strtolower(trim($email))]
         );
-        return $n >= $max;
+        $byIp = (int) Db::value(
+            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND ip = ?',
+            [$since, client_ip()]
+        );
+        return $byEmail >= $max || $byIp >= $max * 6;
     }
 
     /**

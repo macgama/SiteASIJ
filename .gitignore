@@ -5,6 +5,7 @@
 /storage/cache/*
 /storage/*.sqlite
 !/storage/**/.gitkeep
+!/storage/private/.htaccess
 /migration/downloads/
 /vendor/
 .DS_Store
