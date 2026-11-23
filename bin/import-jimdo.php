@@ -65,6 +65,7 @@ final class JimdoImporter
     private array $mediaUrlCache = [];
     /** @var array<string,true> pages créées par l'enregistrement immédiat de cet import */
     private array $createdNow = [];
+    private int $fileFailStreak = 0;
     /** @var array<string,array> état d'une page avant cet import (pour les statistiques et updated_at) */
     private array $before = [];
 
@@ -332,14 +333,14 @@ final class JimdoImporter
     }
 
     /** Téléchargement avec cache local et délai entre requêtes par hôte. */
-    private function fetch(string $url, string $bucket, float $delay): ?string
+    private function fetch(string $url, string $bucket, float $delay, int $maxAttempts = 3): ?string
     {
         $dir = rtrim((string) $this->opt['cache'], '/') . '/' . $bucket;
         $cacheFile = $dir . '/' . sha1($url) . '.bin';
         if (is_file($cacheFile)) {
             return (string) file_get_contents($cacheFile);
         }
-        $body = $this->httpGet($url, $delay);
+        $body = $this->httpGet($url, $delay, $maxAttempts);
         if ($body !== null) {
             if (!is_dir($dir)) {
                 @mkdir($dir, 0775, true);
@@ -351,7 +352,7 @@ final class JimdoImporter
     }
 
     /**
-     * Hôtes autorisés: celui de --source (avec ou sans www) et *.jimcdn.com, en https
+     * Hôtes autorisés: celui de --source (avec ou sans www), *.jimcdn.com et *.jimcontent.com, en https
      * (http seulement si --source est lui-même en http, pour les tests locaux).
      * Empêche qu'un lien du contenu importé fasse lire une ressource interne (SSRF).
      */
@@ -367,17 +368,24 @@ final class JimdoImporter
         if ($host !== '' && $bare($host) === $bare($srcHost)) {
             return $scheme === 'https' || ($scheme === $srcScheme && ($p['port'] ?? null) === ($src['port'] ?? null));
         }
-        return $scheme === 'https' && ($host === 'jimcdn.com' || str_ends_with($host, '.jimcdn.com'));
+        // Jimdo sert les images depuis *.jimcdn.com et redirige les téléchargements
+        // (/app/download/...) vers <site>.jimcontent.com.
+        foreach (['jimcdn.com', 'jimcontent.com'] as $d) {
+            if ($scheme === 'https' && ($host === $d || str_ends_with($host, '.' . $d))) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    private function httpGet(string $url, float $delay): ?string
+    private function httpGet(string $url, float $delay, int $maxAttempts = 3): ?string
     {
         if (!$this->allowedUrl($url)) {
             $this->errors[] = "Adresse refusée (hors de l'ancien site) : $url";
             return null;
         }
         $host = (string) parse_url($url, PHP_URL_HOST);
-        for ($attempt = 1; $attempt <= 3; $attempt++) {
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $wait = ($this->lastHit[$host] ?? 0) + $delay - microtime(true);
             if ($wait > 0) {
                 usleep((int) ($wait * 1e6));
@@ -392,9 +400,11 @@ final class JimdoImporter
                 $this->errors[] = "HTTP $code : $url";
                 return null;
             }
-            sleep((int) max(2, $delay * 2 * $attempt));
+            if ($attempt < $maxAttempts) {
+                sleep((int) min(15, max(2, $delay * 2 * $attempt)));
+            }
         }
-        $this->errors[] = "Échec après 3 essais : $url";
+        $this->errors[] = "Échec après $maxAttempts essai(s) : $url";
         return null;
     }
 
@@ -408,10 +418,10 @@ final class JimdoImporter
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
                 CURLOPT_CONNECTTIMEOUT => 20,
-                CURLOPT_TIMEOUT => 300,
-                // Abandon si le transfert stagne (< 1 Ko/s pendant 60 s): évite un blocage sans fin.
+                CURLOPT_TIMEOUT => 180,
+                // Abandon si le transfert stagne (< 1 Ko/s pendant 30 s): évite un blocage sans fin.
                 CURLOPT_LOW_SPEED_LIMIT => 1024,
-                CURLOPT_LOW_SPEED_TIME => 60,
+                CURLOPT_LOW_SPEED_TIME => 30,
                 CURLOPT_USERAGENT => self::UA,
                 CURLOPT_ENCODING => '',
             ]);
@@ -472,11 +482,22 @@ final class JimdoImporter
         $host = (string) parse_url($url, PHP_URL_HOST);
         $delay = str_ends_with($host, 'jimcdn.com') ? (float) $this->opt['cdn-delay'] : (float) $this->opt['delay'];
         $label = self::nfc(urldecode(basename((string) parse_url($url, PHP_URL_PATH))));
-        $this->say('      fichier : ' . $label . ' …');
-        $body = $this->fetch($url, 'files', $delay);
+        if ($this->fileFailStreak >= 8 && !is_file(rtrim((string) $this->opt['cache'], '/') . '/files/' . sha1($url) . '.bin')) {
+            // Trop d'échecs d'affilée: on n'insiste plus pendant cet import (relancer plus tard reprend ces fichiers).
+            $this->errors[] = "Non téléchargé (téléchargements suspendus après plusieurs échecs) : $url";
+            return null;
+        }
+        $this->say('      fichier : ' . $label);
+        $body = $this->fetch($url, 'files', $delay, 2);
         if ($body === null) {
+            $this->fileFailStreak++;
             $this->errors[] = "Téléchargement impossible : $url";
-            $this->say('      échec : ' . $label);
+            $this->say('      échec, fichier sauté : ' . $label);
+            if ($this->fileFailStreak === 8) {
+                $this->say('      8 échecs d’affilée : les fichiers restants sont sautés, les pages continuent.');
+            }
+        } else {
+            $this->fileFailStreak = 0;
         }
         return $body;
     }
@@ -744,9 +765,10 @@ final class JimdoImporter
                 $this->convertModule($xp, $mod, $blocks, $ctx);
             }
         }
-        // Titre: premier h1 du contenu, sinon <title>
+        // Titre: premier h1 du contenu s'il est court (sinon c'est une phrase d'accroche,
+        // gardée comme intertitre), puis <title>, puis libellé du menu. Accueil: jamais le h1.
         foreach ($blocks as $i => $b) {
-            if ($b['type'] === 'heading' && !empty($b['h1'])) {
+            if ($legacy !== '/' && $b['type'] === 'heading' && !empty($b['h1']) && mb_strlen($b['data']['text']) <= 70) {
                 $title = $b['data']['text'];
                 unset($blocks[$i]);
                 break;
@@ -755,6 +777,9 @@ final class JimdoImporter
         $blocks = array_values($blocks);
         if ($title === '') {
             $title = $docTitle !== '' ? $docTitle : ($this->navTitle[$legacy] ?? 'Page sans titre');
+            if ($legacy === '/' && $docTitle === '') {
+                $title = 'Accueil';
+            }
         }
 
         // Bloc latéral « Informations Transports »

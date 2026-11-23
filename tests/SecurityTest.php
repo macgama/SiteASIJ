@@ -67,6 +67,8 @@ return [
         check($imp->allowedUrl('https://www.asij.ch/app/download/1/a.pdf'));
         check($imp->allowedUrl('https://asij.ch/x'));
         check($imp->allowedUrl('https://image.jimcdn.com/app/cms/image/path/x'));
+        check($imp->allowedUrl('https://s2c49c8dc469ab9ea.jimcontent.com/download/version/0/module/1/name/a.pdf'), 'redirection Jimdo des téléchargements');
+        check(!$imp->allowedUrl('https://jimcontent.com.evil.example/'));
         check(!$imp->allowedUrl('http://169.254.169.254/latest/meta-data//x.jimcdn.com/app/cms/image/'));
         check(!$imp->allowedUrl('http://10.0.0.5/app/download/1/x.pdf'));
         check(!$imp->allowedUrl('https://evil.example/jimcdn.com/'));
