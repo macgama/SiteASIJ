@@ -60,7 +60,7 @@ CFG
   echo "  >>> Notez ce mot de passe provisoire maintenant. <<<"
 
   say "Import du contenu de www.asij.ch en arrière-plan (environ 20 à 30 minutes)"
-  nohup $PHP bin/import-jimdo.php --write-logo > storage/logs/import.log 2>&1 &
+  PHP="$PHP" bash bin/lancer-import.sh
   echo "  Suivi : tail -f $DIR/storage/logs/import.log   (Ctrl+C pour quitter le suivi)"
   echo "  Rapport à la fin : $DIR/migration/rapport-import.md"
 else

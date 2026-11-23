@@ -403,7 +403,10 @@ final class JimdoImporter
                 CURLOPT_FOLLOWLOCATION => false,
                 CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
                 CURLOPT_CONNECTTIMEOUT => 20,
-                CURLOPT_TIMEOUT => 600,
+                CURLOPT_TIMEOUT => 300,
+                // Abandon si le transfert stagne (< 1 Ko/s pendant 60 s): évite un blocage sans fin.
+                CURLOPT_LOW_SPEED_LIMIT => 1024,
+                CURLOPT_LOW_SPEED_TIME => 60,
                 CURLOPT_USERAGENT => self::UA,
                 CURLOPT_ENCODING => '',
             ]);
@@ -427,7 +430,7 @@ final class JimdoImporter
     private function streamGet(string $url): array
     {
         $ctx = stream_context_create(['http' => [
-            'user_agent' => self::UA, 'timeout' => 600, 'follow_location' => 0, 'ignore_errors' => true,
+            'user_agent' => self::UA, 'timeout' => 120, 'follow_location' => 0, 'ignore_errors' => true,
         ]]);
         $body = @file_get_contents($url, false, $ctx);
         $code = 0;
@@ -463,9 +466,12 @@ final class JimdoImporter
         }
         $host = (string) parse_url($url, PHP_URL_HOST);
         $delay = str_ends_with($host, 'jimcdn.com') ? (float) $this->opt['cdn-delay'] : (float) $this->opt['delay'];
+        $label = self::nfc(urldecode(basename((string) parse_url($url, PHP_URL_PATH))));
+        $this->say('      fichier : ' . $label . ' …');
         $body = $this->fetch($url, 'files', $delay);
         if ($body === null) {
             $this->errors[] = "Téléchargement impossible : $url";
+            $this->say('      échec : ' . $label);
         }
         return $body;
     }
@@ -1527,6 +1533,13 @@ function import_jimdo_main(array $argv): int
             $v = ROOT . '/' . $v;
         }
         $opt[$k] = $v;
+    }
+    // Un seul import à la fois (deux imports simultanés bloqueraient la base SQLite).
+    $lockFile = STORAGE . '/import.lock';
+    $lock = @fopen($lockFile, 'c');
+    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+        fwrite(STDERR, "Un import est déjà en cours. Attendez sa fin ou arrêtez-le : pkill -f import-jimdo\n");
+        return 3;
     }
     $imp = new JimdoImporter($opt);
     try {
