@@ -146,6 +146,7 @@ final class MemberController extends Controller
             Db::update('users', ['password_hash' => password_hash($new, PASSWORD_DEFAULT)], 'id = :id', ['id' => $user['id']]);
             Db::run('DELETE FROM password_resets WHERE user_id = ?', [$user['id']]);
             Session::regenerate();
+            Auth::bumpSessionVersion((int) $user['id']);
             audit('password_change', 'user:' . $user['id']);
             flash('Votre mot de passe a été modifié.');
         }
@@ -172,8 +173,9 @@ final class MemberController extends Controller
             } elseif (!Totp::verify($secret, $this->input('code'))) {
                 flash('Le code saisi n\'est pas correct. Vérifiez que l\'heure de votre téléphone est juste et saisissez le code actuel.', 'error');
             } else {
-                Db::update('users', ['totp_secret' => $secret], 'id = :id', ['id' => $user['id']]);
+                Db::update('users', ['totp_secret' => $secret, 'totp_last_step' => null], 'id = :id', ['id' => $user['id']]);
                 unset($_SESSION['totp_setup']);
+                Auth::bumpSessionVersion((int) $user['id']);
                 audit('2fa_enabled', 'user:' . $user['id']);
                 flash('La double authentification est activée. Un code vous sera demandé à chaque connexion.');
             }
@@ -190,7 +192,8 @@ final class MemberController extends Controller
         } elseif (!password_verify((string) ($_POST['current_password'] ?? ''), $hash)) {
             flash('Le mot de passe n\'est pas correct. La double authentification reste active.', 'error');
         } else {
-            Db::update('users', ['totp_secret' => null], 'id = :id', ['id' => $user['id']]);
+            Db::update('users', ['totp_secret' => null, 'totp_last_step' => null], 'id = :id', ['id' => $user['id']]);
+            Auth::bumpSessionVersion((int) $user['id']);
             audit('2fa_disabled', 'user:' . $user['id']);
             flash('La double authentification est désactivée.', 'info');
         }

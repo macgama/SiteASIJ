@@ -9,6 +9,8 @@ CREATE TABLE users (
   role VARCHAR(20) NOT NULL DEFAULT 'member',      -- 'admin' | 'member'
   is_active INTEGER NOT NULL DEFAULT 1,
   totp_secret VARCHAR(64) NULL,
+  totp_last_step INTEGER NULL,                     -- dernier pas TOTP accepté (anti-rejeu)
+  session_version INTEGER NOT NULL DEFAULT 0,      -- incrémenté pour invalider toutes les sessions
   failed_logins INTEGER NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
   last_login_at DATETIME NULL,

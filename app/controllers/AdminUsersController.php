@@ -149,7 +149,12 @@ final class AdminUsersController extends Controller
         }
         if (!empty($_POST['reset_2fa'])) {
             $data['totp_secret'] = null;
+            $data['totp_last_step'] = null;
         }
+        $sensitive = !empty($_POST['reset_2fa'])
+            || ($data['role'] ?? $u['role']) !== $u['role']
+            || ($data['email'] ?? $u['email']) !== $u['email']
+            || (int) ($data['is_active'] ?? $u['is_active']) !== (int) $u['is_active'];
         Db::transaction(function () use ($u, $data, $groupIds) {
             Db::update('users', $data, 'id = :id', ['id' => $u['id']]);
             $this->syncGroups((int) $u['id'], $groupIds);
@@ -157,6 +162,9 @@ final class AdminUsersController extends Controller
                 Db::run('DELETE FROM password_resets WHERE user_id = ?', [$u['id']]);
             }
         });
+        if ($sensitive) {
+            Auth::bumpSessionVersion((int) $u['id']);
+        }
         audit('user_update', 'user:' . $u['id'] . ' ' . $data['email']);
         if (!empty($_POST['reset_2fa']) && !empty($u['totp_secret'])) {
             audit('2fa_reset', 'user:' . $u['id']);
@@ -170,9 +178,9 @@ final class AdminUsersController extends Controller
         $u = $this->findUser((int) $id);
         if ((int) $u['is_active'] !== 1) {
             flash("Ce compte est désactivé: réactivez-le avant d'envoyer une invitation.", 'error');
-        } elseif (AuthController::sendResetLink($u, true)) {
+        } elseif (AuthController::sendResetLink($u, $invite = $u['last_login_at'] === null)) {
             audit('user_invite', 'user:' . $u['id']);
-            flash('Un e-mail a été envoyé à ' . $u['email'] . ' avec un lien (valable 7 jours) pour choisir son mot de passe.');
+            flash('Un e-mail a été envoyé à ' . $u['email'] . ' avec un lien (valable ' . ($invite ? '7 jours' : '1 heure') . ') pour choisir son mot de passe.');
         } else {
             flash("L'e-mail n'a pas pu être envoyé. Vérifiez l'adresse ou réessayez plus tard.", 'error');
         }

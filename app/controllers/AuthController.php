@@ -105,7 +105,7 @@ final class AuthController extends Controller
             $this->abandonLogin();
             redirect('/connexion');
         }
-        if (Auth::throttled((string) $u['email'])) {
+        if (Auth::throttled((string) $u['email']) || Auth::twoFactorThrottled((string) $u['email'])) {
             audit('login_throttled', (string) $u['email']);
             $this->abandonLogin();
             flash(self::THROTTLE_ERROR, 'error');
@@ -113,15 +113,18 @@ final class AuthController extends Controller
         }
         $secret = $mode === 'setup' ? (string) $_SESSION['setup_2fa']['secret'] : (string) $u['totp_secret'];
         $code = $this->input('code');
-        if (!Totp::verify($secret, $code)) {
-            Db::insert('login_attempts', ['ip' => client_ip(), 'email' => mb_strtolower((string) $u['email']), 'created_at' => Db::now()]);
+        $step = Totp::verifyStep($secret, $code);
+        if ($step === null || ($mode !== 'setup' && $u['totp_last_step'] !== null && $step <= (int) $u['totp_last_step'])) {
+            Auth::recordTwoFactorFailure((string) $u['email']);
             $this->view('auth/two_factor', $this->twoFactorData($mode, 'Code incorrect ou expiré. Vérifiez l\'heure de votre téléphone et saisissez le code actuel.'), 422);
             return;
         }
 
+        Db::update('users', ['totp_last_step' => $step], 'id = :id', ['id' => $uid]);
         $after = $_SESSION['after_login'] ?? null;
         if ($mode === 'setup') {
             Db::update('users', ['totp_secret' => $secret], 'id = :id', ['id' => $uid]);
+            Auth::bumpSessionVersion($uid);
             unset($_SESSION['setup_2fa']);
             $u['totp_secret'] = $secret;
             Auth::login($u);
@@ -210,6 +213,7 @@ final class AuthController extends Controller
             Db::run('DELETE FROM password_resets WHERE user_id = ?', [$u['id']]);
         });
         Db::run('DELETE FROM login_attempts WHERE email = ?', [mb_strtolower((string) $u['email'])]);
+        Auth::bumpSessionVersion((int) $u['id']);
         audit('password_reset', 'user:' . $u['id']);
         flash('Votre mot de passe est enregistré. Vous pouvez maintenant vous connecter.');
         redirect('/connexion');

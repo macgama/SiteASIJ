@@ -20,9 +20,12 @@ final class Auth
             $id = $_SESSION['uid'] ?? null;
             if ($id && empty($_SESSION['pending_2fa'])) {
                 $u = Db::one('SELECT * FROM users WHERE id = ? AND is_active = 1', [$id]);
+                if ($u && (int) $u['session_version'] !== (int) ($_SESSION['sv'] ?? -1)) {
+                    $u = null; // mot de passe, 2FA ou droits modifiés depuis l'ouverture de cette session
+                }
                 self::$user = $u ?: null;
                 if (!$u) {
-                    unset($_SESSION['uid']);
+                    $_SESSION = [];
                 }
             }
         }
@@ -75,22 +78,60 @@ final class Auth
         }
     }
 
-    /** Trop de tentatives récentes pour cette IP ou cet e-mail ? */
+    /**
+     * Trop de tentatives récentes ?
+     * - couple (IP, compte): $max échecs / 15 min (cas normal);
+     * - compte toutes IP confondues: 10 x $max / 15 min (attaque distribuée), sans
+     *   permettre à un inconnu de bloquer facilement un compte depuis une seule IP;
+     * - IP tous comptes confondus: 6 x $max / 15 min (plusieurs membres d'une même commune).
+     * Les échecs ne sont jamais effacés par la connexion réussie d'un AUTRE compte.
+     */
     public static function throttled(string $email): bool
     {
         $since = gmdate('Y-m-d H:i:s', time() - 900);
         $max = (int) Config::get('security.max_login_attempts', 5);
-        // Par compte: $max essais / 15 min. Par IP: plafond plus large, car plusieurs
-        // membres peuvent se connecter depuis le même réseau (administration communale).
+        $email = mb_strtolower(trim($email));
+        $pair = (int) Db::value(
+            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND email = ? AND ip = ?',
+            [$since, $email, client_ip()]
+        );
         $byEmail = (int) Db::value(
             'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND email = ?',
-            [$since, mb_strtolower(trim($email))]
+            [$since, $email]
         );
         $byIp = (int) Db::value(
-            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND ip = ?',
+            "SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND ip = ? AND email NOT LIKE '2fa:%'",
             [$since, client_ip()]
         );
-        return $byEmail >= $max || $byIp >= $max * 6;
+        return $pair >= $max || $byEmail >= $max * 10 || $byIp >= $max * 6;
+    }
+
+    /** Codes 2FA faux: au plus 10 par heure et par compte, jamais remis à zéro par une autre connexion. */
+    public static function twoFactorThrottled(string $email): bool
+    {
+        $since = gmdate('Y-m-d H:i:s', time() - 3600);
+        return (int) Db::value(
+            'SELECT COUNT(*) FROM login_attempts WHERE created_at > ? AND email = ?',
+            [$since, '2fa:' . mb_strtolower(trim($email))]
+        ) >= 10;
+    }
+
+    public static function recordTwoFactorFailure(string $email): void
+    {
+        Db::insert('login_attempts', ['ip' => client_ip(), 'email' => '2fa:' . mb_strtolower(trim($email)), 'created_at' => Db::now()]);
+    }
+
+    /**
+     * Invalide toutes les sessions de l'utilisateur (changement de mot de passe, 2FA, rôle…).
+     * Si c'est l'utilisateur courant, sa session actuelle reste valable.
+     */
+    public static function bumpSessionVersion(int $userId): void
+    {
+        Db::run('UPDATE users SET session_version = session_version + 1 WHERE id = ?', [$userId]);
+        if ((int) ($_SESSION['uid'] ?? 0) === $userId) {
+            $_SESSION['sv'] = (int) Db::value('SELECT session_version FROM users WHERE id = ?', [$userId]);
+        }
+        self::$loaded = false;
     }
 
     /**
@@ -121,6 +162,7 @@ final class Auth
     {
         Session::regenerate();
         $_SESSION['uid'] = (int) $u['id'];
+        $_SESSION['sv'] = (int) Db::value('SELECT session_version FROM users WHERE id = ?', [$u['id']]);
         if (!empty($u['totp_secret'])) {
             $_SESSION['pending_2fa'] = true;
         } else {
@@ -133,7 +175,9 @@ final class Auth
     {
         unset($_SESSION['pending_2fa']);
         Db::update('users', ['last_login_at' => Db::now(), 'failed_logins' => 0], 'id = :id', ['id' => $userId]);
-        Db::run('DELETE FROM login_attempts WHERE ip = ?', [client_ip()]);
+        // Effacer uniquement les échecs de CE compte depuis cette IP (pas ceux des autres comptes, ni les échecs 2FA).
+        $email = (string) Db::value('SELECT email FROM users WHERE id = ?', [$userId]);
+        Db::run('DELETE FROM login_attempts WHERE email = ? AND ip = ?', [mb_strtolower($email), client_ip()]);
         self::$loaded = false;
         audit('login');
     }

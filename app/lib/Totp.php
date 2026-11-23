@@ -106,6 +106,31 @@ final class Totp
         return $ok;
     }
 
+    /** Comme verify(), mais retourne le pas de temps accepté (pour refuser un rejeu), ou null. */
+    public static function verifyStep(string $secret, string $code, int $window = 1, ?int $time = null): ?int
+    {
+        $code = (string) preg_replace('/\s+/', '', $code);
+        if (!preg_match('/^\d{' . self::DIGITS . '}$/', $code)) {
+            return null;
+        }
+        try {
+            $key = self::base32Decode($secret);
+        } catch (\InvalidArgumentException) {
+            return null;
+        }
+        if ($key === '') {
+            return null;
+        }
+        $t = intdiv($time ?? time(), self::PERIOD);
+        $found = null;
+        for ($i = -$window; $i <= $window; $i++) {
+            if (hash_equals(self::hotp($key, $t + $i), $code)) {
+                $found = $t + $i;
+            }
+        }
+        return $found;
+    }
+
     /** URI otpauth:// à ouvrir dans une application d'authentification. */
     public static function uri(string $secret, string $account, string $issuer = 'ASIJ'): string
     {

@@ -345,8 +345,32 @@ final class JimdoImporter
         return $body;
     }
 
+    /**
+     * Hôtes autorisés: celui de --source (avec ou sans www) et *.jimcdn.com, en https
+     * (http seulement si --source est lui-même en http, pour les tests locaux).
+     * Empêche qu'un lien du contenu importé fasse lire une ressource interne (SSRF).
+     */
+    public function allowedUrl(string $url): bool
+    {
+        $p = parse_url($url);
+        $host = strtolower((string) ($p['host'] ?? ''));
+        $scheme = strtolower((string) ($p['scheme'] ?? ''));
+        $src = parse_url((string) $this->opt['source']);
+        $srcHost = strtolower((string) ($src['host'] ?? ''));
+        $srcScheme = strtolower((string) ($src['scheme'] ?? 'https'));
+        $bare = static fn(string $h): string => (string) preg_replace('/^www\./', '', $h);
+        if ($host !== '' && $bare($host) === $bare($srcHost)) {
+            return $scheme === 'https' || ($scheme === $srcScheme && ($p['port'] ?? null) === ($src['port'] ?? null));
+        }
+        return $scheme === 'https' && ($host === 'jimcdn.com' || str_ends_with($host, '.jimcdn.com'));
+    }
+
     private function httpGet(string $url, float $delay): ?string
     {
+        if (!$this->allowedUrl($url)) {
+            $this->errors[] = "Adresse refusée (hors de l'ancien site) : $url";
+            return null;
+        }
         $host = (string) parse_url($url, PHP_URL_HOST);
         for ($attempt = 1; $attempt <= 3; $attempt++) {
             $wait = ($this->lastHit[$host] ?? 0) + $delay - microtime(true);
@@ -371,26 +395,39 @@ final class JimdoImporter
 
     private function curlGet(string $url): array
     {
-        $ch = curl_init($url);
-        curl_setopt_array($ch, [
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_MAXREDIRS => 5,
-            CURLOPT_CONNECTTIMEOUT => 20,
-            CURLOPT_TIMEOUT => 600,
-            CURLOPT_USERAGENT => self::UA,
-            CURLOPT_ENCODING => '',
-        ]);
-        $body = curl_exec($ch);
-        $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
-        curl_close($ch);
-        return [$code, is_string($body) ? $body : null];
+        // Redirections suivies à la main pour revérifier l'hôte à chaque étape.
+        for ($hop = 0; $hop <= 5; $hop++) {
+            $ch = curl_init($url);
+            curl_setopt_array($ch, [
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_FOLLOWLOCATION => false,
+                CURLOPT_PROTOCOLS => CURLPROTO_HTTP | CURLPROTO_HTTPS,
+                CURLOPT_CONNECTTIMEOUT => 20,
+                CURLOPT_TIMEOUT => 600,
+                CURLOPT_USERAGENT => self::UA,
+                CURLOPT_ENCODING => '',
+            ]);
+            $body = curl_exec($ch);
+            $code = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
+            $next = (string) curl_getinfo($ch, CURLINFO_REDIRECT_URL);
+            curl_close($ch);
+            if ($code >= 300 && $code < 400 && $next !== '') {
+                if (!$this->allowedUrl($next)) {
+                    $this->errors[] = "Redirection refusée vers : $next";
+                    return [403, null];
+                }
+                $url = $next;
+                continue;
+            }
+            return [$code, is_string($body) ? $body : null];
+        }
+        return [310, null];
     }
 
     private function streamGet(string $url): array
     {
         $ctx = stream_context_create(['http' => [
-            'user_agent' => self::UA, 'timeout' => 600, 'follow_location' => 1, 'max_redirects' => 5, 'ignore_errors' => true,
+            'user_agent' => self::UA, 'timeout' => 600, 'follow_location' => 0, 'ignore_errors' => true,
         ]]);
         $body = @file_get_contents($url, false, $ctx);
         $code = 0;
@@ -467,7 +504,13 @@ final class JimdoImporter
 
     private static function isJimdoImage(string $src): bool
     {
-        return (bool) preg_match('#(^|//)([a-z0-9-]+\.)*jimcdn\.com/app/cms/image/#i', $src);
+        $src = trim(html_entity_decode($src));
+        if (str_starts_with($src, '//')) {
+            $src = 'https:' . $src;
+        }
+        $host = strtolower((string) parse_url($src, PHP_URL_HOST));
+        return ($host === 'jimcdn.com' || str_ends_with($host, '.jimcdn.com'))
+            && str_starts_with((string) parse_url($src, PHP_URL_PATH), '/app/cms/image/');
     }
 
     private function mediaDir(): string
