@@ -41,6 +41,11 @@ final class PageController extends Controller
                 $this->view('public/legal');
                 return;
             }
+            if ($path === '/') {
+                // Pas encore de page d'accueil (site neuf ou import en cours): accueil par défaut.
+                $this->view('public/welcome', ['tree' => self::pageTree(true, 1), 'currentPath' => '/']);
+                return;
+            }
             $this->notFound("La page demandée n'existe pas ou a été déplacée.");
             return;
         }
