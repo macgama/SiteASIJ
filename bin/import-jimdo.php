@@ -63,6 +63,10 @@ final class JimdoImporter
     private int $fakeId = 0;
     private int $requests = 0;
     private array $mediaUrlCache = [];
+    /** @var array<string,true> pages créées par l'enregistrement immédiat de cet import */
+    private array $createdNow = [];
+    /** @var array<string,array> état d'une page avant cet import (pour les statistiques et updated_at) */
+    private array $before = [];
 
     public array $stats = [
         'pages_created' => 0, 'pages_updated' => 0, 'pages_unchanged' => 0, 'pages_skipped' => 0,
@@ -149,6 +153,7 @@ final class JimdoImporter
                 }
                 try {
                     $this->parsed[$legacy] = $this->parsePage($legacy, $html);
+                    $this->savePageNow($legacy);
                 } catch (\Throwable $e) {
                     $this->errors[] = "$legacy : analyse impossible (" . $e->getMessage() . ')';
                 }
@@ -1314,9 +1319,40 @@ final class JimdoImporter
         $order = array_keys($this->parsed);
         $pos = array_flip(array_keys($this->map));
         usort($order, fn($a, $b) => [substr_count($a, '/'), $pos[$a] ?? 0] <=> [substr_count($b, '/'), $pos[$b] ?? 0]);
-        $useSanitize = !$this->opt['dry-run'] && class_exists('App\\Pages') && method_exists('App\\Pages', 'sanitizeBlocks');
-
         foreach ($order as $legacy) {
+            $this->writePage($legacy);
+        }
+    }
+
+    /**
+     * Enregistre tout de suite une page qui vient d'être analysée, pour qu'un import
+     * interrompu garde ce qui est fait. La passe finale (writePages) la réécrit ensuite
+     * avec le bon parent et l'ordre du menu; les statistiques ne comptent que cette passe.
+     */
+    private function savePageNow(string $legacy): void
+    {
+        $keep = [$this->stats, $this->pageLog, $this->warnings];
+        $prev = Db::one('SELECT * FROM pages WHERE legacy_url = ?', [$legacy]);
+        $isNew = !$prev;
+        if ($prev && !isset($this->before[$legacy])) {
+            $this->before[$legacy] = $prev;
+        }
+        try {
+            $this->writePage($legacy);
+        } catch (\Throwable $e) {
+            $this->errors[] = "$legacy : enregistrement immédiat impossible (" . $e->getMessage() . ')';
+        }
+        if ($isNew && Db::one('SELECT id FROM pages WHERE legacy_url = ?', [$legacy])) {
+            $this->createdNow[$legacy] = true;
+        }
+        [$this->stats, $this->pageLog, $this->warnings] = $keep;
+    }
+
+    private function writePage(string $legacy): void
+    {
+        $pos = array_flip(array_keys($this->map));
+        $useSanitize = !$this->opt['dry-run'] && class_exists('App\\Pages') && method_exists('App\\Pages', 'sanitizeBlocks');
+        {
             $d = $this->parsed[$legacy];
             $parentId = null;
             $parentPath = '';
@@ -1360,18 +1396,25 @@ final class JimdoImporter
                 if ($existing['updated_by'] !== null && !$this->opt['force']) {
                     $this->stats['pages_skipped']++;
                     $this->pageLog[] = [$legacy, (string) $existing['path'], 'conservée (modifiée dans l’administration)'];
-                    continue;
+                    return;
                 }
                 $path = self::freePath($path, (int) $existing['id']);
                 $row['path'] = $path;
-                $diff = false;
+                $orig = $this->before[$legacy] ?? $existing;
+                $diff = false;    // par rapport à l'état avant cet import
+                $dirty = false;   // par rapport à l'état actuel en base
                 foreach ($row as $k => $v) {
-                    if ((string) $existing[$k] !== (string) $v) {
-                        $diff = true;
-                    }
+                    $diff = $diff || (string) $orig[$k] !== (string) $v;
+                    $dirty = $dirty || (string) $existing[$k] !== (string) $v;
                 }
-                if ($diff) {
-                    Db::update('pages', $row + ['updated_at' => Db::now(), 'updated_by' => null], 'id = :id', ['id' => (int) $existing['id']]);
+                if ($dirty || $diff) {
+                    $stamp = $diff ? Db::now() : $orig['updated_at'];
+                    Db::update('pages', $row + ['updated_at' => $stamp, 'updated_by' => null], 'id = :id', ['id' => (int) $existing['id']]);
+                }
+                if (isset($this->createdNow[$legacy])) {
+                    $this->stats['pages_created']++;
+                    $this->pageLog[] = [$legacy, $path, 'créée' . ($row['status'] === 'draft' ? ' (brouillon)' : '')];
+                } elseif ($diff) {
                     $this->stats['pages_updated']++;
                     $this->pageLog[] = [$legacy, $path, 'mise à jour'];
                 } else {
