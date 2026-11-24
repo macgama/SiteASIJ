@@ -179,11 +179,6 @@ foreach ($paths as $i => $path) {
     if ($path === '/') {
         $blocks[] = $B('text', ['html' => "<p>L'Association scolaire intercommunale du Jorat (ASIJ) assure la gestion des <strong>bâtiments</strong>, des <strong>transports scolaires</strong> et de l'<strong>accueil extrascolaire</strong> pour la scolarité obligatoire des élèves de Forel (Lavaux), Jorat-Mézières, Savigny et des autres communes membres, soit dix communes.</p>"]);
         $blocks[] = $B('callout', ['style' => 'warning', 'title' => 'Travaux routiers', 'html' => '<p>Veuillez vous renseigner sur les sites des communes.</p>']);
-        $blocks[] = $B('heading', ['text' => 'Actualités', 'level' => 2]);
-        $blocks[] = $B('columns', [
-            'left' => "<h3>Mise au concours</h3><p>L'ASIJ met au concours le poste de <strong>secrétaire</strong> (environ 20 %), basé au Collège du Raffort à Mézières.</p>",
-            'right' => '<h3>Transports scolaires</h3><p>Les horaires 2026-2027 sont disponibles sur la page <a href="/transports-scolaires/horaires-des-transports">Horaires des transports</a>.</p>',
-        ]);
         $img = demo_media('jorat.jpg', 'Le collège du Raffort, à Mézières (image de démonstration)', demo_photo(++$photo), 'image/jpeg', 'image');
         $blocks[] = $B('image', ['media_id' => $img, 'alt' => 'Collège dans le paysage du Jorat', 'caption' => 'Image de démonstration', 'width' => 'full']);
         $blocks[] = $B('heading', ['text' => 'Contact', 'level' => 2]);
@@ -232,6 +227,31 @@ foreach ($paths as $i => $path) {
         'legacy_url' => $path, 'updated_at' => $now, 'updated_by' => null,
     ]);
     $ids[$path] = $id;
+}
+
+// ----------------------------------------------------------------- actualités (sous-pages de /actualites)
+if (!Db::value('SELECT id FROM pages WHERE path = ?', [Pages::NEWS_PATH])) {
+    $newsId = Db::insert('pages', [
+        'parent_id' => null, 'slug' => 'actualites', 'path' => Pages::NEWS_PATH, 'title' => 'Actualités', 'menu_title' => null,
+        'meta_description' => 'Les dernières nouvelles de l’ASIJ.', 'blocks' => '[]', 'status' => 'published', 'show_in_menu' => 0,
+        'sort_order' => 999, 'legacy_url' => null, 'updated_at' => $now, 'updated_by' => null,
+    ]);
+    $demoNews = [
+        ['Mise au concours : secrétaire à 20 %', 'L’ASIJ cherche un ou une secrétaire (environ 20 %) basé·e au Collège du Raffort à Mézières. Délai de postulation : 2 octobre 2026.', '-12 days', true],
+        ['Horaires des transports 2026-2027', 'Les horaires des bus scolaires pour la nouvelle année sont disponibles. Vérifiez l’arrêt et l’heure de passage de votre enfant.', '-30 days', true],
+        ['Travaux routiers à Mézières', 'Des travaux peuvent modifier certains trajets cet automne. Renseignez-vous sur les sites des communes.', '-45 days', false],
+        ['Séance du Conseil intercommunal', 'Le Conseil intercommunal se réunira le 10 décembre 2026 à 20 h. Les préavis sont publiés sur la page du Conseil.', '-60 days', true],
+    ];
+    foreach ($demoNews as $k => [$nt, $sum, $ago, $withImg]) {
+        $cover = $withImg ? demo_media("actualite-$k.jpg", $nt, demo_photo(++$photo), 'image/jpeg', 'image') : null;
+        $slug = Pages::slugify($nt);
+        Db::insert('pages', [
+            'parent_id' => $newsId, 'slug' => $slug, 'path' => Pages::NEWS_PATH . '/' . $slug, 'title' => $nt, 'menu_title' => null,
+            'meta_description' => $sum, 'blocks' => json_encode([$B('text', ['html' => '<p>' . e($sum) . '</p><p>Texte de démonstration.</p>'])], JSON_UNESCAPED_UNICODE),
+            'status' => 'published', 'show_in_menu' => 0, 'sort_order' => $k, 'legacy_url' => null,
+            'cover_media_id' => $cover, 'news_date' => date('Y-m-d', strtotime($ago)), 'updated_at' => $now, 'updated_by' => null,
+        ]);
+    }
 }
 
 // ----------------------------------------------------------------- réglages

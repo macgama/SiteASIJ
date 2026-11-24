@@ -16,6 +16,8 @@ final class AdminSettingsController extends Controller
         'site_name' => ['Nom du site', 100, false],
         'site_tagline' => ['Slogan (sous le nom)', 200, false],
         'contact_address' => ['Adresse postale', 500, true],
+        'contact_name' => ['Personne de contact (pied de page)', 150, false],
+        'contact_role' => ['Fonction de la personne de contact', 150, false],
         'contact_email' => ['Adresse e-mail de contact', 190, false],
         'contact_phone' => ['Téléphone', 50, false],
         'footer_text' => ['Texte du pied de page', 1000, true],

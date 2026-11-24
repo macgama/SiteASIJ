@@ -18,6 +18,8 @@ final class Pages
     ];
 
     public const MAX_BLOCKS = 300;
+    /** Rubrique des actualités: ses sous-pages sont les actualités. */
+    public const NEWS_PATH = '/actualites';
 
     /** Translittère et normalise un texte en slug d'URL (minuscules, chiffres, tirets). */
     public static function slugify(string $s): string

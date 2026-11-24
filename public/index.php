@@ -15,6 +15,7 @@ header('X-Frame-Options: SAMEORIGIN');
 header('Referrer-Policy: strict-origin-when-cross-origin');
 header('Permissions-Policy: camera=(), microphone=(), geolocation=()');
 
+App\Migrations::run();
 $r = new App\Router();
 require APP . '/routes.php';
 

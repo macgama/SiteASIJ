@@ -5,6 +5,7 @@ namespace App\Controllers;
 
 use App\Auth;
 use App\Blocks;
+use App\Pages;
 use App\Controller;
 use App\Db;
 
@@ -56,11 +57,13 @@ final class PageController extends Controller
         }
 
         $blocks = Blocks::decode((string) $page['blocks']);
-        $children = Db::all(
+        $isNewsList = $path === Pages::NEWS_PATH;
+        $children = $isNewsList ? self::latestNews(200) : Db::all(
             "SELECT id, path, title, menu_title, meta_description FROM pages
              WHERE parent_id = ? AND status = 'published' ORDER BY sort_order, title",
             [(int) $page['id']]
         );
+        $parentPath = $page['parent_id'] !== null ? (string) Db::value('SELECT path FROM pages WHERE id = ?', [(int) $page['parent_id']]) : '';
 
         $this->view('public/page', [
             'page' => $page,
@@ -71,7 +74,55 @@ final class PageController extends Controller
             'breadcrumbs' => self::breadcrumbs($page),
             'isDraft' => $isDraft,
             'currentPath' => $path,
+            'isNewsList' => $isNewsList,
+            'isNewsItem' => $parentPath === Pages::NEWS_PATH,
+            'news' => $path === '/' ? self::latestNews(3) : [],
         ]);
+    }
+
+    /** Dernières actualités publiées (sous-pages de /actualites), la plus récente d'abord. */
+    public static function latestNews(int $limit): array
+    {
+        try {
+            return Db::all(
+                "SELECT p.id, p.path, p.title, p.menu_title, p.meta_description, p.news_date, p.cover_media_id, p.updated_at
+                 FROM pages p JOIN pages n ON n.id = p.parent_id
+                 WHERE n.path = ? AND p.status = 'published'
+                 ORDER BY COALESCE(p.news_date, SUBSTR(p.updated_at, 1, 10)) DESC, p.id DESC LIMIT " . max(1, $limit),
+                [Pages::NEWS_PATH]
+            );
+        } catch (\Throwable $e) {
+            error_log('Actualités : ' . $e->getMessage()); // base pas encore mise à jour
+            return [];
+        }
+    }
+
+    /** Date d'une actualité en toutes lettres (« 24 novembre 2026 »). */
+    public static function newsDate(array $n): string
+    {
+        $d = (string) ($n['news_date'] ?? '') ?: substr((string) ($n['updated_at'] ?? ''), 0, 10);
+        if (!preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $d, $m)) {
+            return '';
+        }
+        $mois = ['janvier', 'février', 'mars', 'avril', 'mai', 'juin', 'juillet', 'août', 'septembre', 'octobre', 'novembre', 'décembre'];
+        return (int) $m[3] . ($m[3] === '01' ? 'er' : '') . ' ' . $mois[(int) $m[2] - 1] . ' ' . $m[1];
+    }
+
+    /** Illustration d'une rubrique, d'après l'adresse de son premier niveau. */
+    public static function rubriqueIcon(string $path): string
+    {
+        $top = explode('/', trim($path, '/'))[0] ?? '';
+        $map = [
+            'presentation' => 'people', 'batiments' => 'school', 'transport' => 'bus', 'accueil-extrascolaire' => 'meal',
+            'cet' => 'talk', 'conseil-d-etablissement' => 'talk', 'liens' => 'link', 'en-cours' => 'works',
+            'contact' => 'mail', 'actualites' => 'news', 'mentions' => 'doc', 'plan-du-site' => 'doc',
+        ];
+        foreach ($map as $k => $icon) {
+            if (str_starts_with($top, $k)) {
+                return $icon;
+            }
+        }
+        return 'balloon';
     }
 
     /** Couleur de ballon (variable CSS --b-*) attribuée à la n-ième rubrique du menu. */

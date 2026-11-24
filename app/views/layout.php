@@ -80,6 +80,8 @@ $renderMenu = function (array $items, int $level) use (&$renderMenu, $isActive, 
 $address = trim(Settings::get('contact_address'));
 $email = trim(Settings::get('contact_email'));
 $phone = trim(Settings::get('contact_phone'));
+$contactName = trim(Settings::get('contact_name'));
+$contactRole = trim(Settings::get('contact_role'));
 $footerText = trim(Settings::get('footer_text'));
 $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code) && $code >= 400);
 ?>
@@ -168,8 +170,11 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
       <?php if ($tagline !== ''): ?><p class="footer-tagline"><?= e($tagline) ?></p><?php endif; ?>
       <?php if ($address !== ''): ?><address><?= App\Html::nl($address) ?></address><?php endif; ?>
     </div>
-    <div class="footer-col">
+    <div class="footer-col footer-contact">
       <p class="footer-heading">Contact</p>
+      <?php if ($contactName !== ''): ?>
+      <p class="footer-person"><strong><?= e($contactName) ?></strong><?php if ($contactRole !== ''): ?><br><span><?= e($contactRole) ?></span><?php endif; ?></p>
+      <?php endif; ?>
       <ul class="footer-list" role="list">
         <?php if ($phone !== ''): ?><li>Téléphone&nbsp;: <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $phone)) ?>"><?= e($phone) ?></a></li><?php endif; ?>
         <?php if ($email !== ''): ?><li>E-mail&nbsp;: <a href="mailto:<?= e($email) ?>"><?= e($email) ?></a></li><?php endif; ?>
@@ -190,6 +195,7 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
     <div class="footer-col">
       <p class="footer-heading">Liens</p>
       <ul class="footer-list" role="list">
+        <li><a href="<?= e(PageController::href(App\Pages::NEWS_PATH)) ?>">Actualités</a></li>
         <li><a href="<?= e(PageController::LEGAL_PATH) ?>">Mentions légales</a></li>
         <li><a href="<?= e(PageController::SITEMAP_PATH) ?>">Plan du site</a></li>
         <li><a href="/espace-membres">Espace membres</a></li>

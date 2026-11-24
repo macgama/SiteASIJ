@@ -217,9 +217,28 @@
     });
   }
 
+  /* ------------------------------------------------------------ Apparition des cartes */
+  function initReveal() {
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var els = document.querySelectorAll('.news-card, .rub-card, .subpage-list > li, .gallery-grid > li, .block-people > li');
+    if (!els.length) return;
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { en.target.classList.add('is-visible'); io.unobserve(en.target); }
+      });
+    }, { rootMargin: '0px 0px -8% 0px' });
+    Array.prototype.forEach.call(els, function (el) {
+      var sib = el.parentNode ? Array.prototype.indexOf.call(el.parentNode.children, el) : 0;
+      el.style.setProperty('--d', String(Math.min(sib, 8)));
+      el.classList.add('reveal');
+      io.observe(el);
+    });
+  }
+
   function init() {
     initMenu();
     initLightbox();
+    initReveal();
   }
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);

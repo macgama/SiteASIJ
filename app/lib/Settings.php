@@ -12,6 +12,8 @@ final class Settings
         'site_name' => 'ASIJ',
         'site_tagline' => 'Association scolaire intercommunale du Jorat',
         'contact_address' => "Chemin du Raffort 11\n1083 Mézières",
+        'contact_name' => '',         // personne de contact affichée dans le pied de page
+        'contact_role' => '',
         'contact_email' => '',
         'contact_phone' => '',
         'footer_text' => '',

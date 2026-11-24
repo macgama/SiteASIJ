@@ -427,27 +427,31 @@
   };
 
   // ------------------------------------------------------------ réglages: logo
+  // Choix d'une image (logo des réglages, image d'en-tête d'une page).
   function initLogoPicker() {
-    var box = document.querySelector('[data-logo-picker]');
-    if (!box) return;
-    var input = box.querySelector('input[name="logo_media_id"]');
-    var prev = box.querySelector('[data-logo-preview]');
-    var clear = box.querySelector('[data-logo-clear]');
-    box.querySelector('[data-logo-choose]').addEventListener('click', function () {
-      ASIJ.pickMedia({ kind: 'image', lockKind: true, title: 'Choisir le logo' }).then(function (items) {
-        if (!items) return;
-        input.value = items[0].id;
+    document.querySelectorAll('[data-logo-picker], [data-image-picker]').forEach(function (box) {
+      var isLogo = box.hasAttribute('data-logo-picker');
+      var input = box.querySelector('input[type="hidden"]');
+      var prev = box.querySelector('[data-logo-preview]');
+      var clear = box.querySelector('[data-logo-clear]');
+      var empty = box.getAttribute('data-empty') || 'Aucun logo choisi (le logo par défaut est utilisé).';
+      box.querySelector('[data-logo-choose]').addEventListener('click', function () {
+        ASIJ.pickMedia({ kind: 'image', lockKind: true, title: isLogo ? 'Choisir le logo' : 'Choisir une image' }).then(function (items) {
+          if (!items) return;
+          input.value = items[0].id;
+          prev.innerHTML = '';
+          prev.appendChild(el('img', { src: items[0].url, alt: 'Image choisie' }));
+          clear.hidden = false;
+          ASIJ.markDirty(box.closest('form'));
+        });
+      });
+      clear.addEventListener('click', function () {
+        input.value = '';
         prev.innerHTML = '';
-        prev.appendChild(el('img', { src: items[0].url, alt: 'Logo choisi' }));
-        clear.hidden = false;
+        prev.appendChild(el('span', { class: 'muted', text: empty }));
+        clear.hidden = true;
         ASIJ.markDirty(box.closest('form'));
       });
-    });
-    clear.addEventListener('click', function () {
-      input.value = '';
-      prev.innerHTML = '<span class="muted">Aucun logo choisi (le logo par défaut est utilisé).</span>';
-      clear.hidden = true;
-      ASIJ.markDirty(box.closest('form'));
     });
   }
 

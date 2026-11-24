@@ -121,6 +121,31 @@ $err = fn(string $k) => isset($errors[$k]) ? '<p class="error" id="err-' . e($k)
         </div>
       </section>
 
+      <section class="card side-card"<?= !empty($isNews) ? ' data-news-card' : '' ?>>
+        <h2 class="h3">Image et date</h2>
+        <div class="field">
+          <span class="label" id="cover-label">Image d’en-tête <span class="optional">(facultatif)</span></span>
+          <p class="help">Grande photo affichée en haut de la page et sur la carte de l’actualité.</p>
+          <div class="logo-picker" data-image-picker data-empty="Aucune image : l’en-tête utilise la couleur de la rubrique.">
+            <input type="hidden" name="cover_media_id" value="<?= e((string) ($page['cover_media_id'] ?? '')) ?>">
+            <div class="logo-preview cover-preview" data-logo-preview>
+              <?php if (!empty($cover)): ?><img src="<?= e($cover['url']) ?>" alt="Image choisie"><?php else: ?><span class="muted">Aucune image : l’en-tête utilise la couleur de la rubrique.</span><?php endif; ?>
+            </div>
+            <div class="btn-row">
+              <button type="button" class="btn" data-logo-choose aria-describedby="cover-label">Choisir une image</button>
+              <button type="button" class="btn btn-ghost" data-logo-clear<?= !empty($cover) ? '' : ' hidden' ?>>Retirer l’image</button>
+            </div>
+          </div>
+          <?= $err('cover_media_id') ?>
+        </div>
+        <div class="field">
+          <label for="f-news-date">Date de l’actualité <span class="optional">(pour les actualités)</span></label>
+          <p class="help" id="h-news-date">Les actualités (pages placées sous « Actualités ») sont classées par cette date, la plus récente en premier sur l’accueil.</p>
+          <input id="f-news-date" name="news_date" type="date" value="<?= e((string) ($page['news_date'] ?? '')) ?>" aria-describedby="h-news-date"<?= isset($errors['news_date']) ? ' aria-invalid="true"' : '' ?>>
+          <?= $err('news_date') ?>
+        </div>
+      </section>
+
       <section class="card side-card">
         <h2 class="h3">Moteurs de recherche</h2>
         <div class="field">

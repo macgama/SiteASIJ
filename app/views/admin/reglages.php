@@ -3,6 +3,8 @@
 $help = [
     'site_name' => 'Affiché dans l’en-tête et l’onglet du navigateur.',
     'contact_address' => 'Une ligne par ligne d’adresse.',
+    'contact_name' => 'Affichée en bas de toutes les pages avec sa fonction, le téléphone et l’e-mail ci-dessous (ex. Nicolas Deprez).',
+    'contact_role' => 'Ex. Directeur des opérations.',
     'footer_text' => 'Texte libre affiché en bas de toutes les pages (horaires, remarque…).',
     'banner_text' => 'Laissez vide pour masquer le bandeau. S’il est rempli, il s’affiche en haut de toutes les pages (ex. fermeture exceptionnelle, travaux).',
 ];

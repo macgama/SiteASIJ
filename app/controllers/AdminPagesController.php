@@ -28,12 +28,17 @@ final class AdminPagesController extends Controller
     {
         Auth::requireAdmin();
         $parent = isset($_GET['parent']) && ctype_digit((string) $_GET['parent']) ? (int) $_GET['parent'] : null;
+        $isNews = !empty($_GET['actualite']);
+        if ($isNews) {
+            $parent = (int) Db::value('SELECT id FROM pages WHERE path = ?', [Pages::NEWS_PATH]) ?: null;
+        }
         if ($parent && !Db::value('SELECT id FROM pages WHERE id = ?', [$parent])) {
             $parent = null;
         }
         $page = [
             'id' => null, 'parent_id' => $parent, 'slug' => '', 'path' => '', 'title' => '', 'menu_title' => '',
-            'meta_description' => '', 'blocks' => '[]', 'status' => 'draft', 'show_in_menu' => 1,
+            'meta_description' => '', 'blocks' => '[]', 'status' => 'draft', 'show_in_menu' => $isNews ? 0 : 1,
+            'cover_media_id' => null, 'news_date' => $isNews ? date('Y-m-d') : null,
         ];
         $this->form($page, []);
     }
@@ -313,6 +318,21 @@ final class AdminPagesController extends Controller
         }
         $blocks = Pages::sanitizeBlocks($decoded);
 
+        $cover = $this->input('cover_media_id');
+        $coverId = null;
+        if ($cover !== '') {
+            if (ctype_digit($cover) && Db::value("SELECT id FROM media WHERE id = ? AND kind = 'image'", [(int) $cover])) {
+                $coverId = (int) $cover;
+            } else {
+                $errors['cover_media_id'] = 'L’image choisie n’existe plus. Choisissez-en une autre.';
+            }
+        }
+        $newsDate = $this->input('news_date');
+        if ($newsDate !== '' && !(preg_match('/^\d{4}-\d{2}-\d{2}$/', $newsDate) && checkdate((int) substr($newsDate, 5, 2), (int) substr($newsDate, 8, 2), (int) substr($newsDate, 0, 4)))) {
+            $errors['news_date'] = 'Date invalide (exemple : 24.11.2026).';
+            $newsDate = '';
+        }
+
         $data = [
             'parent_id' => $parentId,
             'slug' => $slug,
@@ -323,6 +343,8 @@ final class AdminPagesController extends Controller
             'blocks' => self::encode($blocks),
             'status' => $status,
             'show_in_menu' => empty($_POST['show_in_menu']) ? 0 : 1,
+            'cover_media_id' => $coverId,
+            'news_date' => $newsDate !== '' ? $newsDate : null,
         ];
         return [$data, $errors, $blocks];
     }
@@ -369,8 +391,16 @@ final class AdminPagesController extends Controller
         foreach (Pages::flat() as $p) {
             $links[] = ['title' => $p['title'], 'path' => $p['path']];
         }
+        $cover = null;
+        if (!empty($page['cover_media_id'])) {
+            $m = Db::one('SELECT * FROM media WHERE id = ?', [(int) $page['cover_media_id']]);
+            $cover = $m ? AdminMediaController::toJson($m) : null;
+        }
+        $newsId = (int) Db::value('SELECT id FROM pages WHERE path = ?', [Pages::NEWS_PATH]);
         $this->view('admin/pages/edit', [
-            'title' => $id ? 'Modifier « ' . $page['title'] . ' »' : 'Nouvelle page',
+            'title' => $id ? 'Modifier « ' . $page['title'] . ' »' : (!empty($page['news_date']) ? 'Nouvelle actualité' : 'Nouvelle page'),
+            'cover' => $cover,
+            'isNews' => $newsId > 0 && (int) ($page['parent_id'] ?? 0) === $newsId,
             'page' => $page,
             'errors' => $errors,
             'blocks' => $blocks,

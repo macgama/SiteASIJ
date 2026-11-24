@@ -12,6 +12,10 @@ $first = explode(' ', (string) ($user['name'] ?? ''))[0];
     <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28"><path d="M6 3h9l4 4v14H6zM15 3v4h4M9 12h7M9 16h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
     <strong>Modifier une page</strong><span>Textes, photos, documents</span>
   </a>
+  <a class="shortcut" href="/admin/pages/nouvelle?actualite=1">
+    <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28"><path d="M4 5h13v14H6a2 2 0 0 1-2-2zM17 9h3v8a2 2 0 0 1-2 2M7 9h7M7 12.5h7M7 16h4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" stroke-linecap="round"/></svg>
+    <strong>Publier une actualité</strong><span>Mise en avant sur l’accueil</span>
+  </a>
   <a class="shortcut" href="/admin/pages/nouvelle">
     <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
     <strong>Créer une page</strong><span>Nouvelle page dans le menu</span>

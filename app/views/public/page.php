@@ -3,12 +3,14 @@ declare(strict_types=1);
 /**
  * Page publique.
  * @var array $page @var string $blocksHtml @var array $children @var array $breadcrumbs @var bool $isDraft
+ * @var array $news @var bool $isNewsList @var bool $isNewsItem
  */
 use App\Auth;
 use App\Controllers\PageController;
 use App\Settings;
 
 $isHome = ($page['path'] ?? '') === '/';
+$news = $news ?? [];
 $hasContent = trim($blocksHtml) !== '';
 ?>
 <?php if (!empty($isDraft)): ?>
@@ -46,6 +48,21 @@ $hasContent = trim($blocksHtml) !== '';
     <path d="M0 96 C 220 58 420 70 620 92 S 1010 120 1190 92 S 1380 74 1440 82 V120 H0Z" fill="#fff"/>
   </svg>
 </section>
+<?php if ($news || Auth::isAdmin()): ?>
+<section class="container news-home" aria-labelledby="news-title">
+  <div class="section-head">
+    <h2 id="news-title" class="section-title">Actualités</h2>
+    <?php if ($news): ?><a class="section-link" href="<?= e(PageController::href(App\Pages::NEWS_PATH)) ?>">Toutes les actualités</a><?php endif; ?>
+  </div>
+  <?php if ($news): ?>
+  <div class="news-grid news-grid-home">
+    <?php foreach ($news as $k => $n): ?><?= App\View::partial('public/news-card', ['n' => $n, 'featured' => $k === 0]) ?><?php endforeach; ?>
+  </div>
+  <?php else: ?>
+  <p class="admin-hint">Aucune actualité publiée. <a href="/admin/pages/nouvelle?actualite=1">Publier une actualité</a> : elle apparaîtra ici (visible seulement par les administrateurs).</p>
+  <?php endif; ?>
+</section>
+<?php endif; ?>
 <?php if ($rubs): ?>
 <section class="container rubriques" aria-labelledby="rubriques-title">
   <h2 id="rubriques-title" class="section-title">Trouver une information</h2>
@@ -71,33 +88,90 @@ $hasContent = trim($blocksHtml) !== '';
   </ul>
 </section>
 <?php endif; ?>
-<?php else: ?>
-<div class="page-head">
-  <div class="container">
-    <?php if ($breadcrumbs): ?>
-    <nav class="breadcrumbs" aria-label="Fil d'Ariane">
-      <ol>
-        <?php foreach ($breadcrumbs as $c): ?>
-        <li><a href="<?= e(PageController::href($c['path'])) ?>"><?= e($c['title']) ?></a></li>
-        <?php endforeach; ?>
-        <li><span aria-current="page"><?= e($page['menu_title'] ?: $page['title']) ?></span></li>
-      </ol>
-    </nav>
+<?php else:
+    $coverUrl = !empty($page['cover_media_id']) ? App\Media::url((int) $page['cover_media_id'], 1600) : '';
+?>
+<div class="page-head<?= $coverUrl !== '' ? ' has-photo' : '' ?>">
+  <?php if ($coverUrl !== ''): ?><img class="page-head-photo" src="<?= e($coverUrl) ?>" alt=""><?php endif; ?>
+  <div class="container page-head-inner">
+    <div class="page-head-text">
+      <?php if ($breadcrumbs): ?>
+      <nav class="breadcrumbs" aria-label="Fil d'Ariane">
+        <ol>
+          <?php foreach ($breadcrumbs as $c): ?>
+          <li><a href="<?= e(PageController::href($c['path'])) ?>"><?= e($c['title']) ?></a></li>
+          <?php endforeach; ?>
+          <li><span aria-current="page"><?= e($page['menu_title'] ?: $page['title']) ?></span></li>
+        </ol>
+      </nav>
+      <?php endif; ?>
+      <h1 class="page-title"><?= e($page['title']) ?></h1>
+      <?php if (!empty($isNewsItem) && ($d = PageController::newsDate($page)) !== ''): ?>
+      <p class="page-date"><time datetime="<?= e((string) ($page['news_date'] ?? '')) ?>"><?= e($d) ?></time></p>
+      <?php elseif (!empty($page['meta_description']) && (!$hasContent || !empty($isNewsList))): ?><p class="page-lead"><?= e($page['meta_description']) ?></p><?php endif; ?>
+    </div>
+    <?php if ($coverUrl === ''): ?>
+    <div class="page-head-art"><?= App\View::partial('public/rub-icon', ['icon' => PageController::rubriqueIcon((string) $page['path'])]) ?></div>
     <?php endif; ?>
-    <h1 class="page-title"><?= e($page['title']) ?></h1>
-    <?php if (!empty($page['meta_description']) && !$hasContent): ?><p class="page-lead"><?= e($page['meta_description']) ?></p><?php endif; ?>
   </div>
 </div>
 <?php endif; ?>
 
-<div class="container page-body<?= $isHome ? ' home-body' : '' ?>">
+<?php
+// Navigation latérale de la rubrique (pages de 2e niveau et plus) : on se repère sans remonter au menu.
+$side = null;
+$topCrumb = null;
+foreach ($breadcrumbs as $c) {
+    if ($c['path'] !== '/') {
+        $topCrumb = $c['path'];
+        break;
+    }
+}
+if (!$isHome && $topCrumb !== null && empty($isNewsItem)) {
+    foreach (PageController::menu() as $top) {
+        if ($top['path'] === $topCrumb && !empty($top['children'])) {
+            $side = $top;
+            break;
+        }
+    }
+}
+$cur = (string) $page['path'];
+?>
+<div class="container page-body<?= $isHome ? ' home-body' : '' ?><?= $side ? ' has-side' : '' ?>">
+  <?php if ($side): ?>
+  <aside class="side-nav" aria-label="Pages de la rubrique <?= e($side['title']) ?>">
+    <p class="side-title"><a href="<?= e(PageController::href($side['path'])) ?>"><?= e($side['title']) ?></a></p>
+    <ul role="list">
+      <?php foreach ($side['children'] as $c):
+          $on = $cur === $c['path'] || str_starts_with($cur, $c['path'] . '/'); ?>
+      <li class="<?= $on ? 'is-on' : '' ?>">
+        <a href="<?= e(PageController::href($c['path'])) ?>"<?= $cur === $c['path'] ? ' aria-current="page"' : '' ?>><?= e($c['title']) ?></a>
+        <?php if ($on && !empty($c['children']) && count($c['children']) <= 12): ?>
+        <ul role="list">
+          <?php foreach ($c['children'] as $g): ?>
+          <li><a href="<?= e(PageController::href($g['path'])) ?>"<?= $cur === $g['path'] ? ' aria-current="page"' : '' ?>><?= e($g['title']) ?></a></li>
+          <?php endforeach; ?>
+        </ul>
+        <?php endif; ?>
+      </li>
+      <?php endforeach; ?>
+    </ul>
+  </aside>
+  <div class="page-main">
+  <?php endif; ?>
   <?php if ($hasContent): ?>
   <div class="blocks"><?= $blocksHtml ?></div>
-  <?php elseif (!$children): ?>
+  <?php elseif (!$children && empty($isNewsList)): ?>
   <p class="empty-note">Cette page sera bientôt complétée.</p>
   <?php endif; ?>
 
+  <?php if (!empty($isNewsList)): ?>
   <?php if ($children): ?>
+  <div class="news-grid"><?php foreach ($children as $n): ?><?= App\View::partial('public/news-card', ['n' => $n]) ?><?php endforeach; ?></div>
+  <?php else: ?>
+  <p class="empty-note">Aucune actualité pour le moment.</p>
+  <?php endif; ?>
+  <?php elseif ($children): ?>
   <section class="subpages<?= $hasContent ? ' subpages-compact' : '' ?>" aria-labelledby="subpages-title">
     <h2 id="subpages-title" class="subpages-title"><?= $hasContent ? 'Dans cette rubrique' : 'Pages de cette rubrique' ?></h2>
     <ul class="subpage-list<?= count($children) > 8 ? ' is-long' : '' ?>" role="list">
@@ -106,11 +180,17 @@ $hasContent = trim($blocksHtml) !== '';
         <a class="subpage-card" href="<?= e(PageController::href((string) $ch['path'])) ?>">
           <span class="subpage-name"><?= e($ch['menu_title'] ?: $ch['title']) ?></span>
           <?php if (!$hasContent && count($children) <= 8 && !empty($ch['meta_description'])): ?><span class="subpage-desc"><?= e($ch['meta_description']) ?></span><?php endif; ?>
-          <span class="subpage-arrow" aria-hidden="true">→</span>
+          <span class="subpage-arrow" aria-hidden="true"></span>
         </a>
       </li>
       <?php endforeach; ?>
     </ul>
   </section>
+  <?php endif; ?>
+  <?php if ($side): ?>
+  </div>
+  <?php endif; ?>
+  <?php if (!empty($isNewsItem)): ?>
+  <p class="news-back"><a href="<?= e(PageController::href(App\Pages::NEWS_PATH)) ?>">Toutes les actualités</a></p>
   <?php endif; ?>
 </div>

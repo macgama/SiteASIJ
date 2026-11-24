@@ -43,6 +43,8 @@ CREATE TABLE pages (
   show_in_menu INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   legacy_url VARCHAR(500) NULL,                    -- ancienne URL Jimdo (redirection 301)
+  cover_media_id INTEGER NULL,                     -- image d'en-tête (facultative)
+  news_date DATE NULL,                             -- date d'une actualité (sous-pages de /actualites)
   updated_at DATETIME NOT NULL,
   updated_by INTEGER NULL
 );
