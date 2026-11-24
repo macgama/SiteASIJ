@@ -21,8 +21,8 @@ $canonical = url(PageController::href($currentPath));
 
 $logoId = (int) Settings::get('logo_media_id');
 $logoUrl = $logoId > 0 ? Media::url($logoId) : '';
-$logoSrc = $logoUrl !== '' ? $logoUrl : asset('img/logo.svg');
-$ogImage = $logoUrl !== '' ? url($logoUrl) : url('/assets/img/logo.svg');
+$logoSrc = $logoUrl !== '' ? $logoUrl : asset('img/logo-asij.png');
+$ogImage = $logoUrl !== '' ? url($logoUrl) : url('/assets/img/logo-asij.png');
 
 $banner = trim(Settings::get('banner_text'));
 $flashes = function_exists('flash') ? (flash() ?? []) : [];

@@ -476,16 +476,15 @@ h1, h2 { font-weight: 800; }
 .site-header::before, .site-footer::before { content: ""; display: block; height: 5px; background: var(--rainbow); }
 .header-inner { padding-top: .6rem; padding-bottom: .6rem; }
 .brand-logo { height: 3.25rem; }
-@media (min-width: 48em) { .brand-logo { height: 4.25rem; } }
+@media (min-width: 48em) { .brand-logo { height: 5rem; } }
 .brand-tagline { color: var(--c-primary); font-weight: 600; font-size: .95rem; }
 
 .main-nav { background: var(--c-primary); }
-.nav-sub { background: var(--c-primary-dark); }
 @media (min-width: 64em) {
   .nav-l1 > li > .nav-row { border-radius: .5rem .5rem 0 0; }
   .nav-l1 > li.is-active > .nav-row { box-shadow: inset 0 -4px 0 var(--b-yellow); }
   .nav-l1 > li > .nav-row:hover { background: rgba(255, 255, 255, .1); }
-  .nav-sub-l2 { border-top: 0; padding-top: 0; overflow-x: hidden; }
+  .nav-sub-l2 { border-top: 0; padding-top: 0; overflow-x: hidden; background: #fff; }
   .nav-sub-l2::before { content: ""; display: block; height: 4px; background: var(--rainbow); margin-bottom: .4rem; }
   .nav-sub .nav-sub { background: var(--c-surface); }
 }

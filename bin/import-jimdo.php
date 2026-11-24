@@ -810,8 +810,9 @@ final class JimdoImporter
         $blocks = array_values($blocks);
         if ($title === '') {
             $title = $docTitle !== '' ? $docTitle : ($this->navTitle[$legacy] ?? 'Page sans titre');
-            if ($legacy === '/' && $docTitle === '') {
-                $title = 'Accueil';
+            if ($legacy === '/') {
+                // Le <title> Jimdo de l'accueil reprend la dernière actualité (« Travaux routiers »...).
+                $title = "Bienvenue sur le site de l'ASIJ";
             }
         }
 
