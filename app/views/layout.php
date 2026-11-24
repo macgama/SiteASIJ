@@ -87,7 +87,7 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
 <meta property="og:url" content="<?= e($canonical) ?>">
 <meta property="og:image" content="<?= e($ogImage) ?>">
 <meta property="og:locale" content="fr_CH">
-<meta name="theme-color" content="#0d5a6b">
+<meta name="theme-color" content="#1f3566">
 <link rel="icon" href="<?= e(asset('img/favicon.svg')) ?>" type="image/svg+xml">
 <link rel="stylesheet" href="<?= e(asset('css/site.css')) ?>">
 <script>document.documentElement.className += ' js';</script>

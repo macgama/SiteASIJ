@@ -29,6 +29,16 @@ $hasContent = trim($blocksHtml) !== '';
     <?php if (($tg = Settings::get('site_tagline')) !== '' && $tg !== $page['title']): ?><p class="hero-lead"><?= e($tg) ?></p><?php endif; ?>
   </div>
 </div>
+<?php $quick = array_values(array_filter(PageController::pageTree(true, 1), fn($it) => $it['path'] !== '/')); ?>
+<?php if ($quick): ?>
+<nav class="container quick-links" aria-label="Accès rapide">
+  <ul class="quick-list" role="list">
+    <?php foreach (array_slice($quick, 0, 8) as $it): ?>
+    <li><a class="quick-card" href="<?= e(PageController::href($it['path'])) ?>"><span class="quick-dot" aria-hidden="true"></span><?= e($it['title']) ?></a></li>
+    <?php endforeach; ?>
+  </ul>
+</nav>
+<?php endif; ?>
 <?php else: ?>
 <div class="page-head">
   <div class="container">

@@ -1,7 +1,7 @@
 /* Espace sécurisé (membres, connexion, administration des comptes et dossiers).
    Classes préfixées .pa- pour ne pas entrer en conflit avec site.css / admin.css. */
 :root {
-  --pa-accent: var(--color-primary, #0d5a6b);
+  --pa-accent: var(--color-primary, #1f3566);
   --pa-accent-dark: #0a4654;
   --pa-text: #1f2933;
   --pa-muted: #52606d;

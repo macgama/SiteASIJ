@@ -74,6 +74,12 @@ final class PageController extends Controller
         ]);
     }
 
+    public function robots(): void
+    {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "User-agent: *\nDisallow: /admin\nDisallow: /espace-membres\nDisallow: /connexion\n\nSitemap: " . url('/sitemap.xml') . "\n";
+    }
+
     public function sitemap(): void
     {
         $pages = Db::all("SELECT path, updated_at FROM pages WHERE status = 'published' ORDER BY path");
