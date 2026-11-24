@@ -34,13 +34,29 @@ $isActive = function (string $p) use ($currentPath): bool {
     return $p === $currentPath || ($p !== '/' && str_starts_with($currentPath, $p . '/'));
 };
 
-$renderMenu = function (array $items, int $level) use (&$renderMenu, $isActive, $currentPath): string {
+// Chaque rubrique (1er niveau du menu) reçoit une couleur de ballon du logo, reprise
+// dans le menu, l'en-tête de ses pages et ses cartes: la couleur indique la rubrique.
+$rubColor = [];
+$rubCurrent = '';
+$ri = 0;
+foreach ($menu as $it) {
+    if ($it['path'] === '/') {
+        continue;
+    }
+    $rubColor[$it['path']] = PageController::rubriqueColor($ri++);
+    if ($rubCurrent === '' && $isActive($it['path'])) {
+        $rubCurrent = $rubColor[$it['path']];
+    }
+}
+
+$renderMenu = function (array $items, int $level) use (&$renderMenu, $isActive, $currentPath, $rubColor): string {
     $h = '<ul class="nav-list nav-l' . $level . '" role="list">';
     foreach ($items as $it) {
         $has = !empty($it['children']);
         $active = $isActive($it['path']);
         $cls = trim(($has ? 'has-sub ' : '') . ($active ? 'is-active' : ''));
-        $h .= '<li' . ($cls !== '' ? ' class="' . $cls . '"' : '') . '>';
+        $style = $level === 1 && isset($rubColor[$it['path']]) ? ' style="--rub: var(--b-' . $rubColor[$it['path']] . ')"' : '';
+        $h .= '<li' . ($cls !== '' ? ' class="' . $cls . '"' : '') . $style . '>';
         $h .= '<div class="nav-row"><a href="' . e(PageController::href($it['path'])) . '"'
             . ($it['path'] === $currentPath ? ' aria-current="page"' : '') . '>' . e($it['title']) . '</a>';
         if ($has) {
@@ -89,11 +105,13 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
 <meta property="og:locale" content="fr_CH">
 <meta name="theme-color" content="#1f3566">
 <link rel="icon" href="<?= e(asset('img/favicon.svg')) ?>" type="image/svg+xml">
+<link rel="preload" href="<?= e(asset('fonts/bricolage-grotesque-latin-wght-normal.woff2')) ?>" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="<?= e(asset('fonts/figtree-latin-wght-normal.woff2')) ?>" as="font" type="font/woff2" crossorigin>
 <link rel="stylesheet" href="<?= e(asset('css/site.css')) ?>">
 <script>document.documentElement.className += ' js';</script>
 <script src="<?= e(asset('js/site.js')) ?>" defer></script>
 </head>
-<body class="<?= e(trim('site ' . (isset($bodyClass) && is_string($bodyClass) ? $bodyClass : ''))) ?>">
+<body class="<?= e(trim('site ' . (isset($bodyClass) && is_string($bodyClass) ? $bodyClass : ''))) ?>"<?= $rubCurrent !== '' ? ' style="--rub: var(--b-' . e($rubCurrent) . ')"' : '' ?>>
 <a class="skip-link" href="#contenu">Aller au contenu</a>
 
 <?php if ($banner !== ''): ?>
@@ -144,7 +162,8 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
 
 <footer class="site-footer">
   <div class="container footer-inner">
-    <div class="footer-col">
+    <div class="footer-col footer-id">
+      <img class="footer-logo" src="<?= e($logoSrc) ?>" alt="" width="88" height="88" loading="lazy">
       <p class="footer-name"><?= e($siteName) ?></p>
       <?php if ($tagline !== ''): ?><p class="footer-tagline"><?= e($tagline) ?></p><?php endif; ?>
       <?php if ($address !== ''): ?><address><?= App\Html::nl($address) ?></address><?php endif; ?>
@@ -158,6 +177,16 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
       </ul>
       <?php if ($footerText !== ''): ?><p class="footer-text"><?= App\Html::nl($footerText) ?></p><?php endif; ?>
     </div>
+    <?php if ($rubColor): ?>
+    <div class="footer-col">
+      <p class="footer-heading">Rubriques</p>
+      <ul class="footer-list" role="list">
+        <?php foreach ($menu as $it): if (!isset($rubColor[$it['path']])) { continue; } ?>
+        <li style="--rub: var(--b-<?= e($rubColor[$it['path']]) ?>)"><a class="footer-rub" href="<?= e(PageController::href($it['path'])) ?>"><?= e($it['title']) ?></a></li>
+        <?php endforeach; ?>
+      </ul>
+    </div>
+    <?php endif; ?>
     <div class="footer-col">
       <p class="footer-heading">Liens</p>
       <ul class="footer-list" role="list">

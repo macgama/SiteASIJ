@@ -22,22 +22,54 @@ $hasContent = trim($blocksHtml) !== '';
 </div>
 <?php endif; ?>
 
-<?php if ($isHome): ?>
-<div class="hero">
-  <div class="container">
-    <h1 class="hero-title"><?= e($page['title'] ?: Settings::get('site_name')) ?></h1>
-    <?php if (($tg = Settings::get('site_tagline')) !== '' && $tg !== $page['title']): ?><p class="hero-lead"><?= e($tg) ?></p><?php endif; ?>
+<?php if ($isHome):
+    $rubs = [];
+    $n = 0;
+    foreach (PageController::menu() as $it) {
+        if ($it['path'] !== '/') {
+            $rubs[] = $it + ['color' => PageController::rubriqueColor($n++)];
+        }
+    }
+    $tg = trim((string) Settings::get('site_tagline'));
+?>
+<section class="hero">
+  <div class="container hero-inner">
+    <div class="hero-text">
+      <h1 class="hero-title"><?= e($page['title'] ?: Settings::get('site_name')) ?></h1>
+      <?php if ($tg !== '' && $tg !== $page['title']): ?><p class="hero-lead"><?= e($tg) ?></p><?php endif; ?>
+      <?php if (!empty($page['meta_description'])): ?><p class="hero-desc"><?= e($page['meta_description']) ?></p><?php endif; ?>
+    </div>
+    <?= App\View::partial('public/hero-art') ?>
   </div>
-</div>
-<?php $quick = array_values(array_filter(PageController::pageTree(true, 1), fn($it) => $it['path'] !== '/')); ?>
-<?php if ($quick): ?>
-<nav class="container quick-links" aria-label="Accès rapide">
-  <ul class="quick-list" role="list">
-    <?php foreach (array_slice($quick, 0, 8) as $it): ?>
-    <li><a class="quick-card" href="<?= e(PageController::href($it['path'])) ?>"><span class="quick-dot" aria-hidden="true"></span><?= e($it['title']) ?></a></li>
+  <svg class="hero-hills" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true" focusable="false">
+    <path d="M0 70 C 180 20 330 30 480 62 S 790 110 960 72 S 1260 18 1440 54 V120 H0Z" fill="#2a447c"/>
+    <path d="M0 96 C 220 58 420 70 620 92 S 1010 120 1190 92 S 1380 74 1440 82 V120 H0Z" fill="#fff"/>
+  </svg>
+</section>
+<?php if ($rubs): ?>
+<section class="container rubriques" aria-labelledby="rubriques-title">
+  <h2 id="rubriques-title" class="section-title">Trouver une information</h2>
+  <ul class="rub-grid" role="list">
+    <?php foreach ($rubs as $r): ?>
+    <li class="rub-card" style="--rub: var(--b-<?= e($r['color']) ?>)">
+      <a class="rub-main" href="<?= e(PageController::href($r['path'])) ?>">
+        <span class="rub-balloon" aria-hidden="true"></span>
+        <span class="rub-name"><?= e($r['title']) ?></span>
+      </a>
+      <?php if (!empty($r['children'])): ?>
+      <ul class="rub-links" role="list">
+        <?php foreach (array_slice($r['children'], 0, 4) as $c): ?>
+        <li><a href="<?= e(PageController::href($c['path'])) ?>"><?= e($c['title']) ?></a></li>
+        <?php endforeach; ?>
+        <?php if (count($r['children']) > 4): ?>
+        <li class="rub-more"><a href="<?= e(PageController::href($r['path'])) ?>">Toutes les pages (<?= count($r['children']) ?>)</a></li>
+        <?php endif; ?>
+      </ul>
+      <?php endif; ?>
+    </li>
     <?php endforeach; ?>
   </ul>
-</nav>
+</section>
 <?php endif; ?>
 <?php else: ?>
 <div class="page-head">
@@ -58,7 +90,7 @@ $hasContent = trim($blocksHtml) !== '';
 </div>
 <?php endif; ?>
 
-<div class="container page-body">
+<div class="container page-body<?= $isHome ? ' home-body' : '' ?>">
   <?php if ($hasContent): ?>
   <div class="blocks"><?= $blocksHtml ?></div>
   <?php elseif (!$children): ?>

@@ -74,6 +74,13 @@ final class PageController extends Controller
         ]);
     }
 
+    /** Couleur de ballon (variable CSS --b-*) attribuée à la n-ième rubrique du menu. */
+    public static function rubriqueColor(int $i): string
+    {
+        $c = ['sky', 'red', 'green', 'orange', 'violet', 'yellow', 'pink'];
+        return $c[$i % count($c)];
+    }
+
     public function robots(): void
     {
         header('Content-Type: text/plain; charset=utf-8');
