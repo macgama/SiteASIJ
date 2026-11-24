@@ -130,6 +130,9 @@ return [
     'Migration: URL originale des images Jimdo (avec ou sans transf)' => function () {
         $orig = 'https://image.jimcdn.com/app/cms/image/path/s2c49c8dc469ab9ea/image/ie9fe4872af78a219/version/1487177292/image.png';
         check(JimdoImporter::originalImageUrl('https://image.jimcdn.com/app/cms/image/transf/dimension=239x10000:format=png/path/s2c49c8dc469ab9ea/image/ie9fe4872af78a219/version/1487177292/image.png') === $orig);
+        $c = JimdoImporter::imageCandidates($orig);
+        check(count($c) === 4 && $c[0] === $orig && str_contains($c[2], '/transf/dimension=1920x10000:format=png/path/'), 'variantes en cas de 403');
+        check(JimdoImporter::imageCandidates('https://www.asij.ch/app/download/1/a.pdf') === ['https://www.asij.ch/app/download/1/a.pdf']);
         check(JimdoImporter::originalImageUrl('//image.jimcdn.com/app/cms/image/transf/none/path/s2c49c8dc469ab9ea/image/ie9fe4872af78a219/version/1487177292/image.png?x=1') === $orig);
         check(JimdoImporter::originalImageUrl($orig) === $orig, 'URL déjà originale');
         check(JimdoImporter::videoUrl('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?rel=0') === 'https://www.youtube.com/watch?v=dQw4w9WgXcQ');

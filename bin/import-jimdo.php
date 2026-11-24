@@ -45,7 +45,8 @@ final class JimdoImporter
     public const TRANSPORT_LEGACY = '/transports-scolaires/';
     public const LOGO_ID = 'ie9fe4872af78a219';
     private const VIDEO_EXT = ['mp4', 'm4v', 'mov', 'webm', 'avi', 'mpg', 'mpeg', 'wmv'];
-    private const UA = 'ASIJ-Migration/1.0 (import du site Jimdo vers le nouveau site)';
+    // Le CDN d'images Jimdo refuse (403) les clients inconnus et les requêtes sans Referer.
+    private const UA = 'Mozilla/5.0 (compatible; ASIJ-Migration/1.0; import du site Jimdo vers le nouveau site)';
 
     /** @var array<string,mixed> */
     public array $opt;
@@ -423,6 +424,8 @@ final class JimdoImporter
                 CURLOPT_LOW_SPEED_LIMIT => 1024,
                 CURLOPT_LOW_SPEED_TIME => 30,
                 CURLOPT_USERAGENT => self::UA,
+                CURLOPT_REFERER => $this->opt['source'] . '/',
+                CURLOPT_HTTPHEADER => ['Accept: image/avif,image/webp,image/png,image/jpeg,application/pdf,*/*;q=0.8', 'Accept-Language: fr-CH,fr;q=0.9'],
                 CURLOPT_ENCODING => '',
             ]);
             $body = curl_exec($ch);
@@ -445,7 +448,7 @@ final class JimdoImporter
     private function streamGet(string $url): array
     {
         $ctx = stream_context_create(['http' => [
-            'user_agent' => self::UA, 'timeout' => 120, 'follow_location' => 0, 'ignore_errors' => true,
+            'user_agent' => self::UA, 'header' => 'Referer: ' . $this->opt['source'] . "/\r\n", 'timeout' => 120, 'follow_location' => 0, 'ignore_errors' => true,
         ]]);
         $body = @file_get_contents($url, false, $ctx);
         $code = 0;
@@ -488,7 +491,18 @@ final class JimdoImporter
             return null;
         }
         $this->say('      fichier : ' . $label);
-        $body = $this->fetch($url, 'files', $delay, 2);
+        $body = null;
+        $cands = self::imageCandidates($url);
+        foreach ($cands as $k => $cand) {
+            $nErr = count($this->errors);
+            $body = $this->fetch($cand, 'files', $delay, 2);
+            if ($body !== null) {
+                break;
+            }
+            if ($k < count($cands) - 1) {
+                array_splice($this->errors, $nErr); // on réessaie avec une autre adresse: pas d'erreur pour l'instant
+            }
+        }
         if ($body === null) {
             $this->fileFailStreak++;
             $this->errors[] = "Téléchargement impossible : $url";
@@ -505,6 +519,25 @@ final class JimdoImporter
     // =================================================================== médias
 
     /** URL d'origine d'une image Jimdo (sans le segment transf/...). */
+    /**
+     * Adresses à essayer pour une image Jimdo. L'original (/app/cms/image/path/...) est parfois
+     * refusé (403): on se rabat sur les variantes « transf » que le site affiche réellement.
+     * @return list<string>
+     */
+    public static function imageCandidates(string $url): array
+    {
+        if (!preg_match('#^(https://[^/]*jimcdn\.com/app/cms/image/)(path/.+)$#', $url, $m)) {
+            return [$url];
+        }
+        $fmt = preg_match('/\.png$/i', $m[2]) ? 'png' : 'jpg';
+        return [
+            $url,
+            $m[1] . 'transf/none/' . $m[2],
+            $m[1] . 'transf/dimension=1920x10000:format=' . $fmt . '/' . $m[2],
+            $m[1] . 'transf/dimension=1024x10000:format=' . $fmt . '/' . $m[2],
+        ];
+    }
+
     public static function originalImageUrl(string $src): string
     {
         $src = trim(html_entity_decode($src));
