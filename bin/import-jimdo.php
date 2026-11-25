@@ -864,8 +864,13 @@ final class JimdoImporter
         }
 
         $blocks = self::mergeFiles($blocks);
+        // « Résumé des séances 2026, 2025… » + documents: regroupés en bas, en listes repliables par année
+        $grouped = \App\Migrations::groupYearArchives(array_values($blocks), 'Comptes rendus des séances');
+        if ($grouped !== null) {
+            $blocks = $grouped;
+        }
         foreach ($blocks as $i => &$b) {
-            unset($b['h1']);
+            unset($b['h1'], $b['id']);
             $b = ['id' => self::blockId($legacy, $i, $b['type'])] + $b;
         }
         unset($b);
