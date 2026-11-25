@@ -57,6 +57,11 @@ final class PageController extends Controller
         }
 
         $blocks = Blocks::decode((string) $page['blocks']);
+        // premier intertitre identique au titre de la page: déjà affiché dans l'en-tête
+        $norm = fn(string $t) => mb_strtolower(trim(preg_replace('/[\s\x{a0}]+/u', ' ', html_entity_decode($t, ENT_QUOTES | ENT_HTML5, 'UTF-8')) ?? $t, " :.!\u{a0}"));
+        if (($blocks[0]['type'] ?? '') === 'heading' && $norm((string) ($blocks[0]['data']['text'] ?? '')) === $norm((string) $page['title'])) {
+            array_shift($blocks);
+        }
         $isNewsList = $path === Pages::NEWS_PATH;
         $children = $isNewsList ? self::latestNews(200) : Db::all(
             "SELECT id, path, title, menu_title, meta_description FROM pages

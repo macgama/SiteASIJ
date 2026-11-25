@@ -45,7 +45,7 @@ $err = fn(string $k) => isset($errors[$k]) ? '<p class="error" id="err-' . e($k)
 
       <div class="field">
         <h2 class="label" id="content-label">Contenu de la page</h2>
-        <p class="help">Le contenu est composé de blocs (texte, photos, documents…). Cliquez sur « Ajouter un bloc » pour commencer. Raccourci&nbsp;: <kbd>Ctrl</kbd>+<kbd>S</kbd> pour enregistrer.</p>
+        <p class="help">Le contenu est composé de blocs (texte, photos, documents…). Cliquez sur « Ajouter un bloc » pour commencer, ou glissez directement des photos et documents depuis votre ordinateur. Déplacez un bloc en le tirant par sa poignée ⠿. Raccourci&nbsp;: <kbd>Ctrl</kbd>+<kbd>S</kbd> pour enregistrer.</p>
         <div id="block-editor" class="block-editor" aria-labelledby="content-label"></div>
         <noscript><p class="flash flash-error">L’éditeur nécessite JavaScript. Activez-le dans votre navigateur.</p></noscript>
         <input type="hidden" name="blocks" id="f-blocks" value="<?= e(json_encode($blocks, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)) ?>">

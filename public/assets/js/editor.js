@@ -1006,6 +1006,82 @@
       clearMarks();
     });
 
+    // glisser des fichiers depuis l'ordinateur : photo → bloc Image, plusieurs photos → Galerie,
+    // documents → Documents à télécharger. Déposé sur un bloc Galerie/Documents : ajouté à ce bloc.
+    function hasFiles(e) { return e.dataTransfer && Array.prototype.indexOf.call(e.dataTransfer.types || [], 'Files') !== -1; }
+    var fileTarget = null;
+    var dropHint = el('div', { class: 'be-drop-hint', 'aria-hidden': 'true', text: 'Déposez vos photos ou documents ici' });
+    root.addEventListener('dragover', function (e) {
+      if (dragBlock || dragItem || !hasFiles(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+      root.classList.add('is-file-over');
+      clearMarks();
+      root.querySelectorAll('.blk.is-file-target').forEach(function (n) { n.classList.remove('is-file-target'); });
+      var t = e.target.closest && e.target.closest('.blk');
+      fileTarget = null;
+      if (t && t.parentNode === root) {
+        if (t._block.type === 'gallery' || t._block.type === 'files') { t.classList.add('is-file-target'); fileTarget = { into: t }; return; }
+        var r = t.getBoundingClientRect();
+        var before = e.clientY < r.top + r.height / 2;
+        t.classList.add(before ? 'drop-before' : 'drop-after');
+        fileTarget = { before: before ? t : t.nextSibling };
+      }
+      if (!dropHint.parentNode) root.appendChild(dropHint);
+    });
+    root.addEventListener('dragleave', function (e) {
+      if (root.contains(e.relatedTarget)) return;
+      root.classList.remove('is-file-over');
+      root.querySelectorAll('.is-file-target').forEach(function (n) { n.classList.remove('is-file-target'); });
+      if (dropHint.parentNode) dropHint.remove();
+      if (!dragBlock) clearMarks();
+    });
+    root.addEventListener('drop', function (e) {
+      if (dragBlock || dragItem || !hasFiles(e) || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      var target = fileTarget;
+      root.classList.remove('is-file-over');
+      root.querySelectorAll('.is-file-target').forEach(function (n) { n.classList.remove('is-file-target'); });
+      if (dropHint.parentNode) dropHint.remove();
+      clearMarks();
+      var files = Array.prototype.slice.call(e.dataTransfer.files);
+      ASIJ.toast('Envoi de ' + files.length + ' fichier' + (files.length > 1 ? 's' : '') + '…');
+      ASIJ.upload(files, {}).then(function (items) {
+        if (!items.length) { ASIJ.toast('Aucun fichier n’a pu être ajouté (type ou taille non acceptés).', true); return; }
+        items.forEach(remember);
+        var imgs = items.filter(function (m) { return m.kind === 'image'; });
+        var docs = items.filter(function (m) { return m.kind !== 'image'; });
+        function label(m) { return m.title || String(m.original_name || '').replace(/\.[a-z0-9]{1,5}$/i, ''); }
+        if (target && target.into) {
+          var sec0 = target.into, d = sec0._block.data;
+          d.items = d.items || [];
+          (sec0._block.type === 'gallery' ? imgs : items).forEach(function (m) {
+            d.items.push(sec0._block.type === 'gallery' ? { media_id: m.id, caption: '' } : { media_id: m.id, label: label(m) });
+          });
+          var fresh = buildBlock(sec0._block);
+          root.replaceChild(fresh, sec0);
+          refresh(); changed();
+          ASIJ.toast(items.length + ' fichier' + (items.length > 1 ? 's ajoutés' : ' ajouté') + ' au bloc.');
+          return;
+        }
+        var before = target && target.before ? target.before : (addMain.parentNode ? addMain : null);
+        var made = [];
+        if (imgs.length === 1) made.push({ type: 'image', data: { media_id: imgs[0].id, alt: '', caption: '', width: 'full' } });
+        if (imgs.length > 1) made.push({ type: 'gallery', data: { title: '', items: imgs.map(function (m) { return { media_id: m.id, caption: '' }; }) } });
+        if (docs.length) made.push({ type: 'files', data: { title: '', sort: 'manual', items: docs.map(function (m) { return { media_id: m.id, label: label(m) }; }) } });
+        var last = null;
+        made.forEach(function (b) {
+          b.id = newId();
+          last = buildBlock(b);
+          root.insertBefore(last, before && before.parentNode === root ? before : (addMain.parentNode ? addMain : null));
+          last.classList.add('is-new');
+        });
+        refresh(); changed();
+        if (last) focusBlock(last);
+        ASIJ.toast(items.length + ' fichier' + (items.length > 1 ? 's ajoutés' : ' ajouté') + ' à la page.');
+      });
+    });
+
     // ------------------------------------------------------------ démarrage
     (Array.isArray(cfg.blocks) ? cfg.blocks : []).forEach(function (b) {
       if (!b || !TYPES[b.type]) return;

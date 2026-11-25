@@ -87,6 +87,7 @@ $hasContent = trim($blocksHtml) !== '';
     <?php foreach ($rubs as $r): ?>
     <li class="rub-card" style="--rub: var(--b-<?= e($r['color']) ?>)">
       <a class="rub-main" href="<?= e(PageController::href($r['path'])) ?>">
+        <span class="rub-ill" aria-hidden="true"><img src="<?= e(asset('img/illustrations/' . PageController::rubriqueIcon((string) $r['path']) . '.svg')) ?>" alt="" width="480" height="360" loading="lazy"></span>
         <span class="rub-balloon" aria-hidden="true"></span>
         <span class="rub-name"><?= e($r['title']) ?></span>
       </a>
@@ -128,7 +129,7 @@ $hasContent = trim($blocksHtml) !== '';
       <?php elseif (!empty($page['meta_description']) && (!$hasContent || !empty($isNewsList))): ?><p class="page-lead"><?= e($page['meta_description']) ?></p><?php endif; ?>
     </div>
     <?php if ($coverUrl === ''): ?>
-    <div class="page-head-art"><?= App\View::partial('public/rub-icon', ['icon' => PageController::rubriqueIcon((string) $page['path'])]) ?></div>
+    <div class="page-head-ill"><img src="<?= e(asset('img/illustrations/' . PageController::rubriqueIcon((string) $page['path']) . '.svg')) ?>" alt="" width="480" height="360"></div>
     <?php endif; ?>
   </div>
 </div>

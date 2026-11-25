@@ -437,3 +437,9 @@ dialog.modal-small { width: min(520px, calc(100vw - 1rem)); }
 .tbl-grid .tbl-rowctrl { border: 0; min-width: 0; white-space: nowrap; padding-left: .3rem; vertical-align: middle; }
 .tbl-grid .icon-btn { width: 1.9rem; height: 1.9rem; }
 .tbl-grid tr.is-head td:not(.tbl-rowctrl) { background: #eef2fa; }
+
+/* Fichiers glissés depuis l'ordinateur */
+.block-editor { position: relative; }
+.block-editor.is-file-over { outline: 3px dashed var(--accent); outline-offset: 6px; border-radius: var(--radius-sm); }
+.blk.is-file-target { box-shadow: 0 0 0 3px var(--accent); }
+.be-drop-hint { position: sticky; bottom: 1rem; margin: 1rem auto 0; width: max-content; max-width: 100%; padding: .6rem 1.1rem; border-radius: 999px; background: var(--accent); color: #fff; font-weight: 700; pointer-events: none; }
