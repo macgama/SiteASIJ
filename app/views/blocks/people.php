@@ -11,7 +11,8 @@ if (!$people) {
 <ul class="block block-people" role="list">
   <?php foreach ($people as $p):
       $name = Blocks::str($p, 'name');
-      $words = preg_split('/\s+/u', $name) ?: [];
+      // initiales sans la civilité (Mme, M., Madame…)
+      $words = array_values(array_filter(preg_split('/\s+/u', $name) ?: [], fn($w) => !preg_match('/^(Mmes?|M\.|MM\.|Mr|Madame|Monsieur|Mlle|Dr|Prof\.?)$/u', $w)));
       $initials = '';
       foreach (array_slice($words, 0, 2) as $w) {
           $initials .= mb_strtoupper(mb_substr($w, 0, 1));

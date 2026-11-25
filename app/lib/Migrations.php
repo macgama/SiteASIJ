@@ -10,7 +10,7 @@ namespace App;
  */
 final class Migrations
 {
-    public const VERSION = 8;
+    public const VERSION = 9;
 
     public static function run(): void
     {
@@ -617,6 +617,11 @@ final class Migrations
         $sections = [];
         $cur = ['head' => null, 'blocks' => []];
         foreach ($blocks as $b) {
+            // intertitre saisi comme simple texte (« Résumé des séances 2021 »)
+            if (($b['type'] ?? '') === 'text' && ($pt = self::plain($b)) !== '' && mb_strlen($pt) <= 80
+                && preg_match('/(?:s[ée]ances?|proc[eè]s|comptes?[- ]rendus?|r[ée]sum[ée]s?|pv)\D{0,30}(?:19|20)\d\d\b/iu', $pt)) {
+                $b = ['id' => $b['id'] ?? Pages::newBlockId(), 'type' => 'heading', 'data' => ['text' => $pt, 'level' => 2]];
+            }
             if (($b['type'] ?? '') === 'heading') {
                 $sections[] = $cur;
                 $cur = ['head' => $b, 'blocks' => []];
@@ -676,6 +681,227 @@ final class Migrations
             }
         }
         return $out;
+    }
+
+    /** Listes de membres (texte ou tableau « Commune / Membre ») → blocs « Personnes » uniformes. */
+    private static function v9(): void
+    {
+        foreach (Db::all("SELECT id, title, blocks FROM pages") as $p) {
+            $blocks = json_decode((string) $p['blocks'], true);
+            if (!is_array($blocks)) {
+                continue;
+            }
+            $new = self::peopleBlocks(array_values($blocks));
+            if ($new === null) {
+                continue;
+            }
+            foreach ($new as &$b) {
+                $b = isset($b['id']) ? $b : ['id' => Pages::newBlockId()] + $b;
+            }
+            unset($b);
+            Db::insert('page_revisions', [
+                'page_id' => (int) $p['id'], 'title' => $p['title'], 'blocks' => $p['blocks'],
+                'created_at' => Db::now(), 'created_by' => null,
+            ]);
+            Db::update('pages', ['blocks' => json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], 'id = :id', ['id' => (int) $p['id']]);
+        }
+    }
+
+    /** Convertit les listes de personnes d'une page; null si rien trouvé. Les blocs créés n'ont pas d'id. */
+    public static function peopleBlocks(array $blocks): ?array
+    {
+        $out = [];
+        $changed = false;
+        foreach ($blocks as $b) {
+            $type = $b['type'] ?? '';
+            if ($type === 'table' && is_array($b['data']['rows'] ?? null) && ($people = self::peopleFromTable($b['data'])) !== null) {
+                $out[] = ['type' => 'people', 'data' => ['items' => $people]];
+                $changed = true;
+                continue;
+            }
+            if ($type === 'text' && ($parts = self::peopleFromHtml((string) ($b['data']['html'] ?? ''))) !== null) {
+                foreach ($parts as $k => $part) {
+                    $out[] = ($k === 0 && isset($b['id']) ? ['id' => $b['id']] : []) + $part;
+                }
+                $changed = true;
+                continue;
+            }
+            $out[] = $b;
+        }
+        return $changed ? $out : null;
+    }
+
+    /** Tableau « Commune | Membre du comité » → personnes. */
+    private static function peopleFromTable(array $d): ?array
+    {
+        $rows = $d['rows'];
+        if (count($rows) < 3 || count($rows[0]) !== 2) {
+            return null;
+        }
+        $head = mb_strtolower(implode(' ', $rows[0]));
+        if (!str_contains($head, 'commune') || !preg_match('/membre|nom|délégu|representant|représentant/u', $head)) {
+            return null;
+        }
+        $items = [];
+        foreach (array_slice($rows, 1) as $r) {
+            $p = self::parsePerson(str_replace("\n", ', ', (string) $r[1]), '');
+            if ($p === null) {
+                return null;
+            }
+            $p['commune'] = self::niceCommune((string) $r[0]);
+            $items[] = $p;
+        }
+        return $items;
+    }
+
+    /** Découpe un HTML: suites de personnes (paragraphes ou listes) → titre de groupe + bloc Personnes. */
+    private static function peopleFromHtml(string $html): ?array
+    {
+        if (trim($html) === '' || !preg_match('/\b(Mmes?|M\.|Madame|Monsieur)\s|\p{Lu}{3,}\s+\p{Lu}\p{Ll}/u', $html)) {
+            return null;
+        }
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="UTF-8"><div id="__r">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NONET);
+        libxml_clear_errors();
+        $root = $doc->getElementById('__r');
+        if (!$root) {
+            return null;
+        }
+        $inner = function (\DOMNode $n) use ($doc): string {
+            $h = '';
+            foreach ($n->childNodes as $c) {
+                $h .= $doc->saveHTML($c);
+            }
+            return $h;
+        };
+        $nodes = [];
+        foreach (iterator_to_array($root->childNodes) as $n) {
+            if ($n instanceof \DOMText && trim($n->textContent) === '') {
+                continue;
+            }
+            $entry = ['html' => $doc->saveHTML($n), 'people' => null, 'title' => null];
+            if ($n instanceof \DOMElement) {
+                $tag = strtolower($n->tagName);
+                if ($tag === 'p') {
+                    $person = self::parsePerson($inner($n), '', true);
+                    if ($person !== null) {
+                        $entry['people'] = [$person];
+                    } elseif (preg_match('#^\s*<(strong|b)>([^<]{2,80})</\1>\s*:?\s*$#u', $inner($n), $m)) {
+                        $entry['title'] = trim(html_entity_decode($m[2], ENT_QUOTES | ENT_HTML5, 'UTF-8'), " :\u{a0}");
+                    }
+                } elseif ($tag === 'ul' || $tag === 'ol') {
+                    $list = [];
+                    $total = 0;
+                    foreach ($n->childNodes as $li) {
+                        if ($li instanceof \DOMElement && strtolower($li->tagName) === 'li') {
+                            $total++;
+                            if (($person = self::parsePerson($inner($li), '')) !== null) {
+                                $list[] = $person;
+                            }
+                        }
+                    }
+                    if ($total > 0 && count($list) === $total) {
+                        $entry['people'] = $list;
+                    }
+                }
+            }
+            $nodes[] = $entry;
+        }
+        $parts = [];
+        $buf = '';
+        $flush = function () use (&$buf, &$parts): void {
+            $h = Html::tidy(trim($buf));
+            if (trim(strip_tags($h)) !== '') {
+                $parts[] = ['type' => 'text', 'data' => ['html' => $h]];
+            }
+            $buf = '';
+        };
+        $found = false;
+        for ($i = 0; $i < count($nodes); $i++) {
+            if ($nodes[$i]['people'] === null) {
+                $buf .= $nodes[$i]['html'];
+                continue;
+            }
+            $run = [];
+            $j = $i;
+            while ($j < count($nodes) && $nodes[$j]['people'] !== null) {
+                $run = array_merge($run, $nodes[$j]['people']);
+                $j++;
+            }
+            if (count($run) < 2) {
+                $buf .= $nodes[$i]['html'];
+                continue;
+            }
+            $title = ($i > 0 && $nodes[$i - 1]['title'] !== null) ? $nodes[$i - 1]['title'] : null;
+            if ($title !== null) {
+                $buf = substr($buf, 0, strlen($buf) - strlen($nodes[$i - 1]['html']));
+            }
+            $flush();
+            if ($title !== null) {
+                $parts[] = ['type' => 'heading', 'data' => ['text' => mb_substr($title, 0, 300), 'level' => 3]];
+            }
+            $parts[] = ['type' => 'people', 'data' => ['items' => $run]];
+            $found = true;
+            $i = $j - 1;
+        }
+        $flush();
+        return $found ? $parts : null;
+    }
+
+    /**
+     * « Mme Sandra Favre, Présidente, <em>Conseil intercommunal</em> », « FISCHER Laetitia » →
+     * ['name', 'role', 'commune']. null si ce n'est pas une personne. $strict: paragraphe isolé
+     * (il faut alors une fonction ou une civilité pour éviter les faux positifs).
+     */
+    public static function parsePerson(string $html, string $commune, bool $strict = false): ?array
+    {
+        $html = Html::cfDecode($html);
+        $org = [];
+        $html = preg_replace_callback('#<(em|i)\b[^>]*>(.*?)</\1>#is', function ($m) use (&$org) {
+            $t = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            if ($t !== '') {
+                $org[] = $t;
+            }
+            return ' ';
+        }, $html) ?? $html;
+        $t = html_entity_decode(strip_tags(preg_replace('#<br\s*/?>#i', ', ', $html) ?? $html), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t = trim(preg_replace('/[\s\x{a0}]+/u', ' ', $t) ?? $t, " ,;:-\u{a0}");
+        if ($t === '' || mb_strlen($t) > 140 || str_contains($t, '@') || preg_match('/\d{3}/', $t) || str_ends_with($t, ':')) {
+            return null;
+        }
+        $civ = '(?:Mmes?|M\.|MM\.|Mr|Madame|Monsieur|Mlle|Dr|Prof\.?)';
+        $hasCiv = (bool) preg_match('/^' . $civ . '\s/u', $t);
+        $upper = (bool) preg_match('/^\p{Lu}[\p{Lu}\'’-]+(?:[ -]\p{Lu}[\p{Lu}\'’-]+)*\s+\p{Lu}\p{Ll}/u', $t);
+        if (!$hasCiv && !$upper) {
+            return null;
+        }
+        $bits = array_values(array_filter(array_map('trim', explode(',', $t)), fn($x) => $x !== ''));
+        $name = array_shift($bits) ?? '';
+        $words = preg_split('/\s+/u', $name) ?: [];
+        if (count($words) < 2 || count($words) > 6) {
+            return null;
+        }
+        $role = implode(', ', $bits);
+        $org = implode(', ', $org);
+        if ($strict && $role === '' && $org === '' && !$hasCiv) {
+            return null;
+        }
+        if ($role === '' && $org !== '') {
+            [$role, $org] = [$org, ''];
+        }
+        return ['name' => mb_substr($name, 0, 200), 'role' => mb_substr($role, 0, 200), 'commune' => mb_substr($org !== '' ? $org : $commune, 0, 200)];
+    }
+
+    /** « 1082 CORCELLES-LE-JORAT » → « Corcelles-le-Jorat ». */
+    private static function niceCommune(string $s): string
+    {
+        $s = trim(preg_replace('/^\d{4}\s*/', '', trim($s)) ?? $s);
+        if ($s !== '' && mb_strtoupper($s) === $s) {
+            $s = mb_convert_case(mb_strtolower($s), MB_CASE_TITLE);
+            $s = preg_replace_callback('/(?<=[-\s])(Le|La|Les|De|Du|Des|Sur|Sous|En)(?=[-\s])/u', fn($m) => mb_strtolower($m[1]), $s) ?? $s;
+        }
+        return $s;
     }
 
     /** Texte brut d'un bloc titre/texte/encadré. */

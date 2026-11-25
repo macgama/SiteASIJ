@@ -99,4 +99,16 @@ return [
         $clean = App\Pages::sanitizeBlocks([['type' => 'table', 'data' => ['head' => false, 'rows' => [['<b>a</b>', 'b', 'c'], ['d']]]]]);
         check($clean[0]['data'] === ['head' => false, 'rows' => [['a', 'b', 'c'], ['d', '', '']]], json_encode($clean[0]['data']));
     },
+    'Migrations: listes de membres en blocs Personnes' => function () {
+        $p = App\Migrations::parsePerson('Mme Sandra Favre, Présidente,   <em>Conseil Intercommunal de l’ASIJ</em>', '');
+        check($p === ['name' => 'Mme Sandra Favre', 'role' => 'Présidente', 'commune' => 'Conseil Intercommunal de l’ASIJ'], json_encode($p, JSON_UNESCAPED_UNICODE));
+        check(App\Migrations::parsePerson('Vous pouvez écrire à parents@example.ch', '') === null, 'pas une personne');
+        $out = App\Migrations::peopleBlocks([['type' => 'text', 'data' => ['html' => '<p><strong>Pour le 1/4 Parents</strong></p><ul><li>Mme A. Exemple</li><li>M. B. Exemple</li></ul>']],
+            ['type' => 'table', 'data' => ['head' => true, 'rows' => [['COMMUNE', 'MEMBRE DU COMITÉ'], ['1510 SYENS', 'FISCHER Laetitia'], ['1082 CORCELLES-LE-JORAT', 'BALISSAT Christophe, Président']]]]]);
+        check(array_column($out, 'type') === ['heading', 'people', 'people'], json_encode(array_column($out, 'type')));
+        check($out[2]['data']['items'][1] === ['name' => 'BALISSAT Christophe', 'role' => 'Président', 'commune' => 'Corcelles-le-Jorat'], json_encode($out[2]['data']['items'][1], JSON_UNESCAPED_UNICODE));
+        $g = App\Migrations::groupYearArchives([['type' => 'text', 'data' => ['html' => '<p>Résumé des séances 2021</p>']], ['type' => 'files', 'data' => ['items' => [['media_id' => 1]]]],
+            ['type' => 'heading', 'data' => ['text' => 'Résumé des séances 2020']], ['type' => 'files', 'data' => ['items' => [['media_id' => 2]]]]], 'Archives');
+        check($g !== null && $g[1]['data']['title'] === 'Séances 2021' && $g[2]['data']['title'] === 'Séances 2020', 'année en texte');
+    },
 ];

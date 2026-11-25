@@ -869,6 +869,11 @@ final class JimdoImporter
         if ($grouped !== null) {
             $blocks = $grouped;
         }
+        // listes de membres → blocs « Personnes » (même présentation partout)
+        $people = \App\Migrations::peopleBlocks(array_values($blocks));
+        if ($people !== null) {
+            $blocks = $people;
+        }
         foreach ($blocks as $i => &$b) {
             unset($b['h1'], $b['id']);
             $b = ['id' => self::blockId($legacy, $i, $b['type'])] + $b;

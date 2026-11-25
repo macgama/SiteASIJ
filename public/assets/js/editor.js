@@ -708,7 +708,7 @@
         }
       },
       people: {
-        label: 'Liste de personnes', desc: 'Membres d’un comité avec leur fonction et leur commune.',
+        label: 'Liste de personnes', desc: 'Membres d’un comité : nom, fonction, commune ou organisme (même présentation partout).',
         defaults: function () { return { items: [] }; },
         render: function (d) {
           var L = itemList(d, 'rows', '.row-item', 'y', function (item, h) {
@@ -720,7 +720,7 @@
             }
             return el('li', { class: 'row-item' }, [
               el('span', { class: 'blk-handle', draggable: 'true', 'data-drag': '', title: 'Glisser pour changer l’ordre', html: icon(IC.drag) }),
-              el('div', { class: 'row-fields' }, [inp('name', 'Nom et prénom', 'Nom et prénom'), inp('role', 'Fonction', 'Fonction (ex. Président)'), inp('commune', 'Commune', 'Commune')]),
+              el('div', { class: 'row-fields' }, [inp('name', 'Nom et prénom', 'Nom et prénom'), inp('role', 'Fonction', 'Fonction (ex. Président)'), inp('commune', 'Commune ou organisme', 'Commune ou organisme')]),
               el('div', { class: 'row-tools' }, moveTools('y', h, item.name || 'personne'))
             ]);
           }, 'Aucune personne dans la liste.');
