@@ -832,3 +832,14 @@ main { padding-bottom: 3rem; }
 .image-row { display: flex; flex-wrap: wrap; gap: 1.25rem 2rem; align-items: flex-start; }
 .image-row > .block-image { margin: 0; flex: 0 0 auto; width: var(--natural-w); max-width: 100%; }
 .image-row figcaption { max-width: var(--natural-w); }
+
+/* ---------- Listes de documents repliables (archives) */
+.files-collapsible { border: 1px solid var(--c-border); border-radius: 1rem; background: #fff; margin: .75rem 0; overflow: hidden; }
+.files-collapsible > summary { display: flex; align-items: center; gap: 1rem; padding: .95rem 1.2rem; cursor: pointer; list-style: none; font-weight: 700; }
+.files-collapsible > summary::-webkit-details-marker { display: none; }
+.files-collapsible > summary::after { content: ""; width: .6rem; height: .6rem; margin-left: .25rem; border-right: 2.5px solid currentColor; border-bottom: 2.5px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform .2s; color: var(--rub, var(--c-primary)); }
+.files-collapsible[open] > summary::after { transform: rotate(-135deg) translateY(-2px); }
+.files-collapsible > summary:hover { background: var(--c-surface); }
+.files-collapsible > summary .files-title { margin: 0; font-family: var(--font-display); font-size: 1.15rem; color: var(--c-primary-dark); }
+.files-collapsible .files-count { margin-left: auto; font-weight: 500; font-size: .9rem; color: var(--c-muted); }
+.files-collapsible > .file-list { padding: 0 1.2rem 1.1rem; margin: 0; }

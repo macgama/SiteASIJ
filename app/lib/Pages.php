@@ -14,7 +14,7 @@ final class Pages
     /** Types de blocs connus (voir docs/ARCHITECTURE.md). */
     public const BLOCK_TYPES = [
         'heading', 'text', 'image', 'gallery', 'files', 'video',
-        'callout', 'button', 'contact', 'columns', 'people', 'separator',
+        'callout', 'button', 'contact', 'columns', 'people', 'separator', 'table',
     ];
 
     public const MAX_BLOCKS = 300;
@@ -430,6 +430,7 @@ final class Pages
                     'title' => self::str($d['title'] ?? '', 300),
                     'items' => array_slice($items, 0, 500),
                     'sort' => ($d['sort'] ?? '') === 'name_desc' ? 'name_desc' : 'manual',
+                    'collapsed' => !empty($d['collapsed']),
                 ];
             case 'video':
                 $mid = self::mediaId($d['media_id'] ?? null, $media);
@@ -469,6 +470,19 @@ final class Pages
                     }
                 }
                 return ['items' => array_slice($items, 0, 300)];
+            case 'table':
+                $rows = [];
+                foreach (array_slice(is_array($d['rows'] ?? null) ? $d['rows'] : [], 0, 300) as $r) {
+                    if (is_array($r)) {
+                        $rows[] = array_map(fn($c) => self::text(is_scalar($c) ? (string) $c : '', 2000), array_slice(array_values($r), 0, 8));
+                    }
+                }
+                $n = $rows ? max(array_map('count', $rows)) : 0;
+                foreach ($rows as &$r) {
+                    $r = array_pad($r, $n, '');
+                }
+                unset($r);
+                return ['head' => ($d['head'] ?? true) !== false, 'rows' => $rows];
             case 'separator':
             default:
                 return [];

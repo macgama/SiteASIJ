@@ -85,4 +85,18 @@ return [
         Db::run('DELETE FROM pages');
         Db::run("DELETE FROM settings WHERE name IN ('schema_version', 'contact_name', 'contact_role', 'contact_email', 'contact_phone')");
     },
+    'Migrations: tableaux des blocs Texte en blocs Tableau' => function () {
+        $html = '<p>Intro</p><table><tbody><tr><td><p><strong>COMMUNE</strong></p></td><td><p><strong>MEMBRE</strong></p></td><td></td></tr>'
+            . '<tr><td>1510 SYENS</td><td>FISCHER Laetitia</td><td>&nbsp;</td></tr><tr><td>1085 VULLIENS</td><td>MANIGLEY Gaël<br>Vice-Président</td><td></td></tr>'
+            . '<tr><td><p><strong>BUREAU</strong></p><p>BLANC Fabienne</p></td><td></td><td></td></tr></tbody></table>';
+        $parts = App\Migrations::splitTables($html);
+        check(array_column($parts, 'type') === ['text', 'table', 'text'], json_encode(array_column($parts, 'type')));
+        check($parts[1]['data']['head'] === true && count($parts[1]['data']['rows']) === 3 && count($parts[1]['data']['rows'][0]) === 2, 'tableau nettoyé');
+        check($parts[1]['data']['rows'][2][1] === "MANIGLEY Gaël\nVice-Président", 'retour à la ligne');
+        check(str_contains($parts[2]['data']['html'], 'BUREAU'), 'bureau sorti du tableau');
+        $out = App\Blocks::render([['id' => 't', 'type' => 'table', 'data' => $parts[1]['data'] + ['x' => 1]]]);
+        check(str_contains($out, '<th scope="col">COMMUNE</th>') && str_contains($out, 'MANIGLEY Gaël<br>Vice-Président'), 'rendu tableau');
+        $clean = App\Pages::sanitizeBlocks([['type' => 'table', 'data' => ['head' => false, 'rows' => [['<b>a</b>', 'b', 'c'], ['d']]]]]);
+        check($clean[0]['data'] === ['head' => false, 'rows' => [['a', 'b', 'c'], ['d', '', '']]], json_encode($clean[0]['data']));
+    },
 ];

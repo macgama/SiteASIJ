@@ -423,3 +423,17 @@ dialog.modal-small { width: min(520px, calc(100vw - 1rem)); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+/* Bloc Tableau */
+.tbl-scroll { overflow-x: auto; margin: .5rem 0 .75rem; }
+.tbl-grid { border-collapse: separate; border-spacing: 0; min-width: 100%; }
+.tbl-grid td { padding: 0; border: 1px solid var(--border); vertical-align: top; min-width: 9rem; }
+.tbl-grid td + td { border-left: 0; }
+.tbl-grid tr + tr td { border-top: 0; }
+.tbl-grid textarea { display: block; width: 100%; min-height: 2.4rem; border: 0; border-radius: 0; padding: .5rem .6rem; resize: none; font: inherit; background: transparent; overflow: hidden; }
+.tbl-grid textarea:focus { outline: 3px solid var(--focus, #f6c445); outline-offset: -3px; background: #fff; }
+.tbl-grid tr.is-head textarea { font-weight: 700; background: #eef2fa; }
+.tbl-grid .tbl-colctrl td { border: 0; padding: 0 0 .25rem; min-width: 0; text-align: center; white-space: nowrap; }
+.tbl-grid .tbl-rowctrl { border: 0; min-width: 0; white-space: nowrap; padding-left: .3rem; vertical-align: middle; }
+.tbl-grid .icon-btn { width: 1.9rem; height: 1.9rem; }
+.tbl-grid tr.is-head td:not(.tbl-rowctrl) { background: #eef2fa; }

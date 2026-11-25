@@ -25,13 +25,19 @@ if (Blocks::str($data, 'sort') === 'name_desc') {
     usort($rows, fn($a, $z) => strnatcasecmp($z['label'], $a['label']));
 }
 $title = Blocks::str($data, 'title');
+$collapsed = !empty($data['collapsed']) && $title !== '';
 $icons = [
     'pdf' => 'PDF', 'word' => 'DOC', 'sheet' => 'XLS', 'slides' => 'PPT', 'image' => 'IMG',
     'archive' => 'ZIP', 'audio' => 'SON', 'video' => 'VID', 'file' => 'FICH',
 ];
 ?>
+<?php if ($collapsed): ?>
+<details class="block block-files files-collapsible"<?= !empty($data['open']) ? ' open' : '' ?>>
+  <summary><span class="files-title"><?= e($title) ?></span><span class="files-count"><?= count($rows) ?> document<?= count($rows) > 1 ? 's' : '' ?></span></summary>
+<?php else: ?>
 <section class="block block-files"<?= $title !== '' ? ' aria-label="' . e($title) . '"' : '' ?>>
   <?php if ($title !== ''): ?><h2 class="files-title"><?= e($title) ?></h2><?php endif; ?>
+<?php endif; ?>
   <ul class="file-list" role="list">
     <?php foreach ($rows as $r):
         $m = $r['m'];
@@ -55,4 +61,4 @@ $icons = [
     </li>
     <?php endforeach; ?>
   </ul>
-</section>
+<?= $collapsed ? '</details>' : '</section>' ?>

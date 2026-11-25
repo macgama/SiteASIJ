@@ -45,7 +45,8 @@
       contact: 'M2.5 5h15v10h-15zM2.5 5.5l7.5 6 7.5-6',
       columns: 'M2.5 4h6.5v12H2.5zM11 4h6.5v12H11z',
       people: 'M7 9a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM13.5 9a2 2 0 1 0 0-4M2.5 16.5c.5-2.8 2.3-4.5 4.5-4.5s4 1.7 4.5 4.5M13 12c2.2 0 3.8 1.5 4.3 4',
-      separator: 'M2.5 10h15'
+      separator: 'M2.5 10h15',
+      table: 'M2.5 4h15v12h-15zM2.5 8h15M2.5 12h15M8 4v12M13 4v12'
     };
 
     // ------------------------------------------------------------ champs simples
@@ -598,6 +599,12 @@
               field('Titre de la liste (facultatif)', textInput(d, 'title', { maxlength: '300', placeholder: 'Ex. Procès-verbaux 2026' })),
               field('Ordre d’affichage', select(d, 'sort', [['manual', 'Dans l’ordre ci-dessous'], ['name_desc', 'Par libellé, ordre décroissant (le plus récent en premier pour les noms datés)']]))
             ]),
+            (function () {
+              var c = el('input', { type: 'checkbox' });
+              c.checked = !!d.collapsed;
+              c.addEventListener('change', function () { d.collapsed = c.checked; changed(); });
+              return el('label', { class: 'check' }, [c, el('span', { text: 'Liste repliée : on clique sur le titre pour voir les documents (pratique pour les archives par année)' })]);
+            })(),
             L.list, L.empty,
             el('div', { class: 'btn-row' }, [add])
           ];
@@ -722,13 +729,77 @@
           return [L.list, L.empty, el('div', { class: 'btn-row' }, [add])];
         }
       },
+      table: {
+        label: 'Tableau', desc: 'Lignes et colonnes (membres, horaires, tarifs…), avec ligne d’en-tête.',
+        defaults: function () { return { head: true, rows: [['', ''], ['', '']] }; },
+        render: function (d) {
+          if (!Array.isArray(d.rows) || !d.rows.length) d.rows = [['', '']];
+          var wrap = el('div', { class: 'tbl-edit' });
+          var headChk = el('input', { type: 'checkbox' });
+          headChk.checked = d.head !== false;
+          headChk.addEventListener('change', function () { d.head = headChk.checked; draw(); changed(); });
+          function cols() { return d.rows.reduce(function (n, r) { return Math.max(n, r.length); }, 1); }
+          function norm() { var c = cols(); d.rows.forEach(function (r) { while (r.length < c) r.push(''); }); }
+          function focusCell(r, c) { setTimeout(function () { var t = wrap.querySelector('[data-cell="' + r + '-' + c + '"]'); if (t) t.focus(); }, 0); }
+          function grow(t) { t.style.height = 'auto'; t.style.height = (t.scrollHeight + 2) + 'px'; }
+          function draw() {
+            norm();
+            var c = cols();
+            var table = el('table', { class: 'tbl-grid' + (d.head !== false ? ' has-head' : '') });
+            var ctrl = el('tr', { class: 'tbl-colctrl' });
+            for (var j = 0; j < c; j++) {
+              (function (j) {
+                ctrl.appendChild(el('td', {}, [
+                  toolBtn(IC.left, 'Déplacer la colonne ' + (j + 1) + ' à gauche', function () { if (j > 0) { d.rows.forEach(function (r) { var x = r[j]; r[j] = r[j - 1]; r[j - 1] = x; }); draw(); changed(); focusCell(0, j - 1); } }),
+                  toolBtn(IC.right, 'Déplacer la colonne ' + (j + 1) + ' à droite', function () { if (j < c - 1) { d.rows.forEach(function (r) { var x = r[j]; r[j] = r[j + 1]; r[j + 1] = x; }); draw(); changed(); focusCell(0, j + 1); } }),
+                  toolBtn(IC.trash, 'Supprimer la colonne ' + (j + 1), function () { if (c > 1 && confirm('Supprimer la colonne ' + (j + 1) + ' ?')) { d.rows.forEach(function (r) { r.splice(j, 1); }); draw(); changed(); } }, 'danger')
+                ]));
+              })(j);
+            }
+            ctrl.appendChild(el('td'));
+            table.appendChild(ctrl);
+            d.rows.forEach(function (row, i) {
+              var tr = el('tr', { class: i === 0 && d.head !== false ? 'is-head' : '' });
+              row.forEach(function (val, j) {
+                var t = el('textarea', { rows: '1', 'data-cell': i + '-' + j, 'aria-label': (i === 0 && d.head !== false ? 'En-tête' : 'Ligne ' + (i + 1)) + ', colonne ' + (j + 1) });
+                t.value = val || '';
+                t.addEventListener('input', function () { row[j] = t.value; grow(t); changed(); });
+                t.addEventListener('keydown', function (e) {
+                  if (e.key === 'Tab' && !e.shiftKey && i === d.rows.length - 1 && j === c - 1) { e.preventDefault(); d.rows.push(new Array(c).fill('')); draw(); changed(); focusCell(i + 1, 0); }
+                });
+                tr.appendChild(el('td', {}, [t]));
+                setTimeout(function () { grow(t); }, 0);
+              });
+              tr.appendChild(el('td', { class: 'tbl-rowctrl' }, [
+                toolBtn(IC.up, 'Monter la ligne ' + (i + 1), function () { if (i > 0) { var x = d.rows[i]; d.rows[i] = d.rows[i - 1]; d.rows[i - 1] = x; draw(); changed(); focusCell(i - 1, 0); } }),
+                toolBtn(IC.down, 'Descendre la ligne ' + (i + 1), function () { if (i < d.rows.length - 1) { var x = d.rows[i]; d.rows[i] = d.rows[i + 1]; d.rows[i + 1] = x; draw(); changed(); focusCell(i + 1, 0); } }),
+                toolBtn(IC.trash, 'Supprimer la ligne ' + (i + 1), function () { if (d.rows.length > 1) { d.rows.splice(i, 1); draw(); changed(); } }, 'danger')
+              ]));
+              table.appendChild(tr);
+            });
+            wrap.innerHTML = '';
+            wrap.appendChild(el('div', { class: 'tbl-scroll' }, [table]));
+          }
+          draw();
+          var addRow = el('button', { type: 'button', class: 'btn', html: icon(IC.plus) + ' Ajouter une ligne' });
+          addRow.addEventListener('click', function () { d.rows.push(new Array(cols()).fill('')); draw(); changed(); focusCell(d.rows.length - 1, 0); });
+          var addCol = el('button', { type: 'button', class: 'btn', html: icon(IC.plus) + ' Ajouter une colonne' });
+          addCol.addEventListener('click', function () { if (cols() >= 8) { alert('8 colonnes au maximum, pour rester lisible sur téléphone.'); return; } d.rows.forEach(function (r) { r.push(''); }); draw(); changed(); focusCell(0, cols() - 1); });
+          return [
+            el('label', { class: 'check' }, [headChk, el('span', { text: 'La première ligne est une ligne d’en-tête (titres des colonnes)' })]),
+            wrap,
+            el('div', { class: 'btn-row' }, [addRow, addCol]),
+            el('p', { class: 'help', text: 'Astuce : la touche Tab passe à la case suivante et ajoute une ligne à la fin. Les adresses e-mail et web deviennent des liens.' })
+          ];
+        }
+      },
       separator: {
         label: 'Ligne de séparation', desc: 'Une ligne horizontale entre deux parties.',
         defaults: function () { return {}; },
         render: function () { return [el('hr', { class: 'blk-preview-sep' }), el('p', { class: 'muted small', text: 'Une ligne horizontale sépare le contenu au-dessus et en dessous.' })]; }
       }
     };
-    var ORDER = ['text', 'heading', 'image', 'gallery', 'files', 'callout', 'button', 'video', 'columns', 'people', 'contact', 'separator'];
+    var ORDER = ['text', 'heading', 'image', 'gallery', 'files', 'table', 'callout', 'button', 'video', 'columns', 'people', 'contact', 'separator'];
 
     // ------------------------------------------------------------ choix du type de bloc
     var typeDlg = null, typeResolve = null;

@@ -14,7 +14,7 @@ final class Blocks
     /** Types de blocs reconnus (voir docs/ARCHITECTURE.md). */
     public const TYPES = [
         'heading', 'text', 'image', 'gallery', 'files', 'video',
-        'callout', 'button', 'contact', 'columns', 'people', 'separator',
+        'callout', 'button', 'contact', 'columns', 'people', 'separator', 'table',
     ];
 
     /** @param array<int,mixed> $blocks */

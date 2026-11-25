@@ -10,7 +10,7 @@ namespace App;
  */
 final class Migrations
 {
-    public const VERSION = 6;
+    public const VERSION = 8;
 
     public static function run(): void
     {
@@ -425,6 +425,257 @@ final class Migrations
                 'blocks' => json_encode($blocks, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             ], 'id = :id', ['id' => (int) $r['id']]);
         }
+    }
+
+    /**
+     * Les tableaux contenus dans les blocs Texte (pages importées) deviennent des blocs « Tableau »,
+     * modifiables ligne par ligne dans l'éditeur. Colonnes vides retirées; une ligne finale avec
+     * une seule case remplie (ex. « BUREAU … ») sort du tableau et redevient du texte.
+     */
+    private static function v7(): void
+    {
+        foreach (Db::all("SELECT id, title, blocks FROM pages WHERE blocks LIKE '%<table%'") as $p) {
+            $blocks = json_decode((string) $p['blocks'], true);
+            if (!is_array($blocks)) {
+                continue;
+            }
+            $out = [];
+            $changed = false;
+            foreach ($blocks as $b) {
+                if (($b['type'] ?? '') === 'text' && str_contains((string) ($b['data']['html'] ?? ''), '<table')) {
+                    $parts = self::splitTables((string) $b['data']['html']);
+                    if (count($parts) !== 1 || ($parts[0]['type'] ?? '') !== 'text') {
+                        foreach ($parts as $k => $part) {
+                            $out[] = ['id' => $k === 0 && isset($b['id']) ? $b['id'] : Pages::newBlockId()] + $part;
+                        }
+                        $changed = true;
+                        continue;
+                    }
+                }
+                $out[] = $b;
+            }
+            if (!$changed) {
+                continue;
+            }
+            Db::insert('page_revisions', [
+                'page_id' => (int) $p['id'], 'title' => $p['title'], 'blocks' => $p['blocks'],
+                'created_at' => Db::now(), 'created_by' => null,
+            ]);
+            Db::update('pages', ['blocks' => json_encode($out, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], 'id = :id', ['id' => (int) $p['id']]);
+        }
+    }
+
+    /** Découpe un HTML en blocs text / table (sans id). */
+    public static function splitTables(string $html): array
+    {
+        $doc = new \DOMDocument('1.0', 'UTF-8');
+        libxml_use_internal_errors(true);
+        $doc->loadHTML('<?xml encoding="UTF-8"><div id="__r">' . $html . '</div>', LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD | LIBXML_NONET);
+        libxml_clear_errors();
+        $root = $doc->getElementById('__r');
+        if (!$root) {
+            return [['type' => 'text', 'data' => ['html' => $html]]];
+        }
+        // tableau emballé dans un paragraphe ou un div: on déballe
+        do {
+            $unwrapped = false;
+            foreach (iterator_to_array($root->childNodes) as $n) {
+                if ($n instanceof \DOMElement && strtolower($n->tagName) !== 'table' && $n->getElementsByTagName('table')->length > 0) {
+                    while ($n->firstChild) {
+                        $root->insertBefore($n->firstChild, $n);
+                    }
+                    $root->removeChild($n);
+                    $unwrapped = true;
+                }
+            }
+        } while ($unwrapped);
+        $parts = [];
+        $buf = '';
+        $flushText = function () use (&$buf, &$parts): void {
+            $h = Html::tidy(trim($buf));
+            if (trim(strip_tags($h)) !== '') {
+                $parts[] = ['type' => 'text', 'data' => ['html' => $h]];
+            }
+            $buf = '';
+        };
+        foreach (iterator_to_array($root->childNodes) as $n) {
+            if (!($n instanceof \DOMElement) || strtolower($n->tagName) !== 'table') {
+                $buf .= $doc->saveHTML($n);
+                continue;
+            }
+            // lignes et cases
+            $rows = [];
+            foreach ($n->getElementsByTagName('tr') as $tr) {
+                $cells = [];
+                foreach ($tr->childNodes as $td) {
+                    if ($td instanceof \DOMElement && in_array(strtolower($td->tagName), ['td', 'th'], true)) {
+                        $inner = '';
+                        foreach ($td->childNodes as $c) {
+                            $inner .= $doc->saveHTML($c);
+                        }
+                        $cells[] = ['html' => $inner, 'text' => self::cellText($inner), 'bold' => (bool) preg_match('#^\s*(<p[^>]*>\s*)*<(strong|b)\b#i', $inner)];
+                    }
+                }
+                if ($cells) {
+                    $rows[] = $cells;
+                }
+            }
+            $w = $rows ? max(array_map('count', $rows)) : 0;
+            foreach ($rows as &$r) {
+                $r = array_pad($r, $w, ['html' => '', 'text' => '', 'bold' => false]);
+            }
+            unset($r);
+            // colonnes entièrement vides
+            for ($j = $w - 1; $j >= 0; $j--) {
+                if (implode('', array_map(fn($r) => $r[$j]['text'], $rows)) === '') {
+                    foreach ($rows as &$r) {
+                        array_splice($r, $j, 1);
+                    }
+                    unset($r);
+                }
+            }
+            $rows = array_values(array_filter($rows, fn($r) => implode('', array_column($r, 'text')) !== ''));
+            $w = $rows ? count($rows[0]) : 0;
+            $single = fn($r) => count(array_filter(array_column($r, 'text'), fn($t) => $t !== '')) === 1 && $w > 1;
+            $before = '';
+            while ($rows && $single($rows[0])) {
+                $before .= implode('', array_column(array_shift($rows), 'html'));
+            }
+            $after = '';
+            while ($rows && $single(end($rows))) {
+                $after = implode('', array_column(array_pop($rows), 'html')) . $after;
+            }
+            $buf .= $before;
+            if (count($rows) < 2 || $w < 2) {
+                foreach ($rows as $r) {
+                    $buf .= '<p>' . implode('<br>', array_filter(array_column($r, 'html'), fn($h) => trim(strip_tags($h)) !== '')) . '</p>';
+                }
+                $buf .= $after;
+                continue;
+            }
+            $flushText();
+            $first = $rows[0];
+            $head = true;
+            foreach ($first as $c) {
+                $up = $c['text'] !== '' && mb_strtoupper($c['text']) === $c['text'] && preg_match('/\p{L}/u', $c['text']);
+                if ($c['text'] !== '' && !$c['bold'] && !$up) {
+                    $head = false;
+                }
+            }
+            $parts[] = ['type' => 'table', 'data' => ['head' => $head, 'rows' => array_map(fn($r) => array_column($r, 'text'), $rows)]];
+            $buf = $after;
+        }
+        $flushText();
+        return $parts ?: [['type' => 'text', 'data' => ['html' => $html]]];
+    }
+
+    /** Texte d'une case: paragraphes et <br> en retours à la ligne; un lien garde son adresse. */
+    private static function cellText(string $html): string
+    {
+        $html = Html::cfDecode($html);
+        $html = preg_replace_callback('#<a\b[^>]*href="(?:mailto:)?([^"]+)"[^>]*>(.*?)</a>#is', function ($m) {
+            $txt = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+            $url = html_entity_decode($m[1], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            return ($txt === '' || str_contains($url, $txt) || str_starts_with($url, '/')) ? ($txt !== '' ? $txt : $url) : "$txt ($url)";
+        }, $html) ?? $html;
+        $t = preg_replace('#<(br|/p|/li|/h\d|/div)[^>]*>#i', "\n", $html) ?? $html;
+        $t = html_entity_decode(strip_tags($t), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $t = str_replace("\u{a0}", ' ', $t);
+        $lines = array_filter(array_map(fn($l) => trim(preg_replace('/[ \t]+/u', ' ', $l) ?? $l), explode("\n", $t)), fn($l) => $l !== '');
+        return implode("\n", $lines);
+    }
+
+    /**
+     * Page CEt: les « Résumé des séances 2026, 2025… » (un titre + des PDF par année) sont
+     * regroupés en bas de page sous « Comptes rendus des séances », en listes repliables
+     * (l'année la plus récente ouverte). Le reste de la page garde son ordre.
+     */
+    private static function v8(): void
+    {
+        $p = Db::one("SELECT id, title, blocks FROM pages WHERE path = '/cet' OR legacy_url LIKE '%/cet/' ORDER BY (path = '/cet') DESC LIMIT 1");
+        if (!$p) {
+            return;
+        }
+        $blocks = json_decode((string) $p['blocks'], true);
+        if (!is_array($blocks)) {
+            return;
+        }
+        $new = self::groupYearArchives(array_values($blocks), 'Comptes rendus des séances');
+        if ($new === null) {
+            return;
+        }
+        Db::insert('page_revisions', [
+            'page_id' => (int) $p['id'], 'title' => $p['title'], 'blocks' => $p['blocks'],
+            'created_at' => Db::now(), 'created_by' => null,
+        ]);
+        Db::update('pages', ['blocks' => json_encode($new, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], 'id = :id', ['id' => (int) $p['id']]);
+    }
+
+    /** Sections « titre contenant une année + documents » regroupées à la fin. null si rien à faire. */
+    public static function groupYearArchives(array $blocks, string $archiveTitle): ?array
+    {
+        $sections = [];
+        $cur = ['head' => null, 'blocks' => []];
+        foreach ($blocks as $b) {
+            if (($b['type'] ?? '') === 'heading') {
+                $sections[] = $cur;
+                $cur = ['head' => $b, 'blocks' => []];
+            } else {
+                $cur['blocks'][] = $b;
+            }
+        }
+        $sections[] = $cur;
+        $keep = [];
+        $years = [];
+        foreach ($sections as $sec) {
+            $t = (string) ($sec['head']['data']['text'] ?? '');
+            $hasFiles = (bool) array_filter($sec['blocks'], fn($b) => ($b['type'] ?? '') === 'files');
+            if ($sec['head'] !== null && $hasFiles && preg_match('/(?:s[ée]ances?|proc[eè]s|comptes?[- ]rendus?|r[ée]sum[ée]s?|pv)\D{0,30}((?:19|20)\d\d)\b|^\s*((?:19|20)\d\d)\s*$/iu', $t, $m)) {
+                $year = $m[1] !== '' ? $m[1] : $m[2];
+                $items = [];
+                $other = [];
+                foreach ($sec['blocks'] as $b) {
+                    if (($b['type'] ?? '') === 'files') {
+                        $items = array_merge($items, (array) ($b['data']['items'] ?? []));
+                    } elseif (($b['type'] ?? '') !== 'separator') {
+                        $other[] = $b;
+                    }
+                }
+                $years[] = ['year' => (int) $year, 'title' => 'Séances ' . $year, 'items' => $items, 'other' => $other];
+                continue;
+            }
+            $keep[] = $sec;
+        }
+        if (count($years) < 2) {
+            return null;
+        }
+        usort($years, fn($a, $z) => $z['year'] <=> $a['year']);
+        $out = [];
+        foreach ($keep as $sec) {
+            if ($sec['head'] !== null) {
+                $out[] = $sec['head'];
+            }
+            $bs = $sec['blocks'];
+            while ($bs && (end($bs)['type'] ?? '') === 'separator') {
+                array_pop($bs);
+            }
+            foreach ($bs as $b) {
+                $out[] = $b;
+            }
+        }
+        while ($out && (end($out)['type'] ?? '') === 'separator') {
+            array_pop($out);
+        }
+        $out[] = ['id' => Pages::newBlockId(), 'type' => 'heading', 'data' => ['text' => $archiveTitle, 'level' => 2]];
+        foreach ($years as $i => $y) {
+            $out[] = ['id' => Pages::newBlockId(), 'type' => 'files', 'data' => [
+                'title' => $y['title'], 'items' => $y['items'], 'sort' => 'manual', 'collapsed' => $i > 0,
+            ]];
+            foreach ($y['other'] as $b) {
+                $out[] = $b;
+            }
+        }
+        return $out;
     }
 
     /** Texte brut d'un bloc titre/texte/encadré. */

@@ -1220,7 +1220,10 @@ final class JimdoImporter
         $html = Html::clean(self::inner($mod));
         $plain = trim(str_replace("\u{a0}", ' ', html_entity_decode(strip_tags($html), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
         if ($plain !== '') {
-            $target[] = ['type' => 'text', 'data' => ['html' => $html]];
+            // les tableaux deviennent des blocs « Tableau » éditables
+            foreach (str_contains($html, '<table') ? \App\Migrations::splitTables($html) : [['type' => 'text', 'data' => ['html' => $html]]] as $part) {
+                $target[] = $part;
+            }
         }
         foreach ($images as $img) {
             $this->imageBlock($xp, $img, $mod, $target, 'half');
