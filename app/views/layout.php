@@ -176,7 +176,7 @@ $robots = !empty($noindex) || !empty($isDraft) || (isset($code) && is_int($code)
       <p class="footer-person"><strong><?= e($contactName) ?></strong><?php if ($contactRole !== ''): ?><br><span><?= e($contactRole) ?></span><?php endif; ?></p>
       <?php endif; ?>
       <ul class="footer-list" role="list">
-        <?php if ($phone !== ''): ?><li>Téléphone&nbsp;: <a href="tel:<?= e(preg_replace('/[^0-9+]/', '', $phone)) ?>"><?= e($phone) ?></a></li><?php endif; ?>
+        <?php if ($phone !== ''): ?><li>Téléphone&nbsp;: <?= implode(' / ', array_map(fn($ph) => '<a href="tel:' . e(preg_replace('/[^0-9+]/', '', $ph)) . '">' . e($ph) . '</a>', array_filter(array_map('trim', preg_split('#[/,;]#', $phone)), 'strlen'))) ?></li><?php endif; ?>
         <?php if ($email !== ''): ?><li>E-mail&nbsp;: <a href="mailto:<?= e($email) ?>"><?= e($email) ?></a></li><?php endif; ?>
         <li><a href="/contact">Formulaire de contact</a></li>
       </ul>
