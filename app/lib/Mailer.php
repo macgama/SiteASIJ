@@ -46,8 +46,25 @@ final class Mailer
             'Content-Transfer-Encoding' => '8bit',
             'X-Mailer' => 'ASIJ',
         ];
-        // -f : adresse d'enveloppe (meilleure délivrabilité sur les mutualisés)
-        $params = '-f' . $from;
-        return @mail($to, mb_encode_mimeheader($subject, 'UTF-8', 'Q'), $body, $headers, $params);
+        if (!function_exists('mail')) {
+            error_log('Mailer: la fonction mail() est désactivée sur cet hébergement.');
+            return false;
+        }
+        try {
+            // -f : adresse d'enveloppe (meilleure délivrabilité sur les mutualisés)
+            $ok = mail($to, mb_encode_mimeheader($subject, 'UTF-8', 'Q'), $body, $headers, '-f' . $from);
+            if (!$ok) {
+                // certains hébergeurs refusent le paramètre -f: nouvel essai sans
+                $ok = mail($to, mb_encode_mimeheader($subject, 'UTF-8', 'Q'), $body, $headers);
+            }
+        } catch (\Throwable $e) {
+            error_log('Mailer: envoi impossible à ' . $to . ' : ' . $e->getMessage());
+            return false;
+        }
+        if (!$ok) {
+            $err = error_get_last();
+            error_log('Mailer: mail() a échoué pour ' . $to . ($err ? ' : ' . $err['message'] : ''));
+        }
+        return $ok;
     }
 }
