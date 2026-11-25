@@ -125,6 +125,16 @@ return [
         @unlink($f);
         App\Config::load(require __DIR__ . '/config.test.php');
     },
+    'Mailer: SMTP injoignable -> false sans erreur fatale' => function () {
+        $cfg = require __DIR__ . '/config.test.php';
+        unset($cfg['mail']['transport']);
+        $cfg['mail']['smtp'] = ['host' => '127.0.0.1', 'port' => 1, 'secure' => '', 'timeout' => 2];
+        App\Config::load($cfg);
+        $old = ini_set('error_log', sys_get_temp_dir() . '/asij-mail-err-' . getmypid() . '.log');
+        check(App\Mailer::send('marie@exemple.ch', 'S', 'B') === false, 'échec signalé');
+        ini_set('error_log', (string) $old);
+        App\Config::load(require __DIR__ . '/config.test.php');
+    },
     'Import CSV: séparateurs, BOM, en-tête, erreurs' => function () {
         $groups = [['id' => 1, 'name' => 'Conseil intercommunal', 'slug' => 'conseil'], ['id' => 2, 'name' => 'Comité de direction', 'slug' => 'codir']];
         $csv = "\xEF\xBB\xBFnom;email;groupes;role\r\n"

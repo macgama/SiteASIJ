@@ -14,6 +14,15 @@ return [
         'from' => 'noreply@asij.ch',
         'from_name' => 'ASIJ',
         'contact_to' => 'contact@asij.ch',   // destinataire du formulaire de contact
+        // Envoi par SMTP (obligatoire chez Infomaniak, où mail() est désactivée).
+        // 'from' doit être l'adresse du compte SMTP ci-dessous.
+        // 'smtp' => [
+        //     'host' => 'mail.infomaniak.com',
+        //     'port' => 465,               // 465 = SSL, 587 = STARTTLS ('secure' => 'tls')
+        //     'secure' => 'ssl',
+        //     'user' => 'noreply@asij.ch',
+        //     'password' => 'CHANGER',
+        // ],
     ],
     'security' => [
         'session_name' => 'asij_sess',
