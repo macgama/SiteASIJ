@@ -31,6 +31,7 @@ migration/         manifest.json = inventaire de l'ancien site; downloads/ (igno
 - Les fichiers confidentiels sont dans `storage/private/` avec un nom aléatoire, servis uniquement par
   `MemberController::download` après contrôle d'accès, avec `Content-Disposition: attachment`, `X-Content-Type-Options: nosniff`, `Cache-Control: private, no-store`.
 - Chaque téléchargement confidentiel et chaque action d'admin est tracé avec `audit()`.
+- Connexion: limite par couple (IP, compte) avec plafonds plus larges par compte et par IP; échecs 2FA limités à 10/heure/compte; un code TOTP ne peut pas être rejoué; `users.session_version` invalide toutes les autres sessions après changement de mot de passe, de 2FA, de rôle, d'e-mail ou de statut.
 - Rôles: `admin` (édite tout) et `member` (lit les dossiers de ses groupes). Seuls les admins modifient les pages.
 - Accès à un dossier privé: l'utilisateur appartient à au moins un groupe autorisé sur le dossier **ou sur un dossier parent**. Les admins voient tout.
 

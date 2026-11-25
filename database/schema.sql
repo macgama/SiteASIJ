@@ -9,6 +9,8 @@ CREATE TABLE users (
   role VARCHAR(20) NOT NULL DEFAULT 'member',      -- 'admin' | 'member'
   is_active INTEGER NOT NULL DEFAULT 1,
   totp_secret VARCHAR(64) NULL,
+  totp_last_step INTEGER NULL,                     -- dernier pas TOTP accepté (anti-rejeu)
+  session_version INTEGER NOT NULL DEFAULT 0,      -- incrémenté pour invalider toutes les sessions
   failed_logins INTEGER NOT NULL DEFAULT 0,
   locked_until DATETIME NULL,
   last_login_at DATETIME NULL,
@@ -41,6 +43,8 @@ CREATE TABLE pages (
   show_in_menu INTEGER NOT NULL DEFAULT 1,
   sort_order INTEGER NOT NULL DEFAULT 0,
   legacy_url VARCHAR(500) NULL,                    -- ancienne URL Jimdo (redirection 301)
+  cover_media_id INTEGER NULL,                     -- image d'en-tête (facultative)
+  news_date DATE NULL,                             -- date d'une actualité (sous-pages de /actualites)
   updated_at DATETIME NOT NULL,
   updated_by INTEGER NULL
 );
