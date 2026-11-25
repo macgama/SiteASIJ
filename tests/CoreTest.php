@@ -74,10 +74,13 @@ return [
         check(App\Settings::get('contact_email') === 'x.test@example.ch', 'email');
         check(App\Settings::get('contact_phone') === '079 592 20 96 / 021 557 35 08', 'tél: ' . App\Settings::get('contact_phone'));
         $home = json_decode((string) Db::value("SELECT blocks FROM pages WHERE path = '/'"), true);
-        check(array_column($home, 'id') === ['a', 'b'], 'accueil: ' . json_encode(array_column($home, 'id')));
+        check(array_column($home, 'id') === ['b'], 'accueil: ' . json_encode(array_column($home, 'id')));
         $l = App\Controllers\PageController::latestNews(5);
         check(count($l) === 2 && $l[0]['title'] === 'Travaux routiers', 'actualités: ' . json_encode(array_column($l, 'title')));
         check($l[0]['meta_description'] === 'Veuillez vous renseigner sur les sites des communes', 'résumé');
+        check(Db::value('SELECT id FROM pages WHERE path = ?', [App\Pages::INFOS_PATH]) !== null, 'encadré informations importantes');
+        check(App\Html::tidy('<p>&nbsp;</p><p>a<br><br><br>b<br></p><p> <br></p>') === '<p>a<br>b</p>', 'grands vides retirés');
+        check(str_contains(App\Html::cfDecode('<a href="/cdn-cgi/l/email-protection#4221266c23312b2802252f232b2e6c212d2f">[email&#160;protected]</a>'), 'mailto:cd.asij@gmail.com">cd.asij@gmail.com<'), 'e-mail Cloudflare décodé');
         Db::run('DELETE FROM page_revisions');
         Db::run('DELETE FROM pages');
         Db::run("DELETE FROM settings WHERE name IN ('schema_version', 'contact_name', 'contact_role', 'contact_email', 'contact_phone')");

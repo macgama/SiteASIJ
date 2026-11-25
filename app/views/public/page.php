@@ -48,8 +48,23 @@ $hasContent = trim($blocksHtml) !== '';
     <path d="M0 96 C 220 58 420 70 620 92 S 1010 120 1190 92 S 1380 74 1440 82 V120 H0Z" fill="#fff"/>
   </svg>
 </section>
-<?php if ($news || Auth::isAdmin()): ?>
-<section class="container news-home" aria-labelledby="news-title">
+<?php
+    $infos = $infos ?? null;
+    $showInfos = $infos && ($infos['html'] !== '' || Auth::isAdmin());
+    $showNews = $news || Auth::isAdmin();
+?>
+<?php if ($showInfos || $showNews): ?>
+<div class="container home-top<?= $showInfos && $showNews ? ' has-infos' : '' ?>">
+<?php if ($showInfos): ?>
+<aside class="infos-panel" aria-labelledby="infos-title">
+  <h2 id="infos-title" class="infos-title"><span class="infos-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M12 3a6 6 0 0 0-6 6v3.5L4.5 16h15L18 12.5V9a6 6 0 0 0-6-6zM10 19a2 2 0 0 0 4 0" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></span>Informations importantes</h2>
+  <?php if ($infos['html'] !== ''): ?><div class="infos-body"><?= $infos['html'] ?></div>
+  <?php else: ?><p class="admin-hint">Encadré vide : ajoutez-y les informations urgentes (visible seulement par les administrateurs).</p><?php endif; ?>
+  <?php if (Auth::isAdmin()): ?><p class="infos-edit"><a href="/admin/pages/<?= (int) $infos['id'] ?>">Modifier ces informations</a></p><?php endif; ?>
+</aside>
+<?php endif; ?>
+<?php if ($showNews): ?>
+<section class="news-home" aria-labelledby="news-title">
   <div class="section-head">
     <h2 id="news-title" class="section-title">Actualités</h2>
     <?php if ($news): ?><a class="section-link" href="<?= e(PageController::href(App\Pages::NEWS_PATH)) ?>">Toutes les actualités</a><?php endif; ?>
@@ -62,6 +77,8 @@ $hasContent = trim($blocksHtml) !== '';
   <p class="admin-hint">Aucune actualité publiée. <a href="/admin/pages/nouvelle?actualite=1">Publier une actualité</a> : elle apparaîtra ici (visible seulement par les administrateurs).</p>
   <?php endif; ?>
 </section>
+<?php endif; ?>
+</div>
 <?php endif; ?>
 <?php if ($rubs): ?>
 <section class="container rubriques" aria-labelledby="rubriques-title">
@@ -159,7 +176,12 @@ $cur = (string) $page['path'];
   </aside>
   <div class="page-main">
   <?php endif; ?>
-  <?php if ($hasContent): ?>
+  <?php if ($hasContent && $isHome): ?>
+  <section class="home-about" aria-labelledby="about-title">
+    <h2 id="about-title" class="section-title">L’ASIJ en bref</h2>
+    <div class="blocks"><?= $blocksHtml ?></div>
+  </section>
+  <?php elseif ($hasContent): ?>
   <div class="blocks"><?= $blocksHtml ?></div>
   <?php elseif (!$children && empty($isNewsList)): ?>
   <p class="empty-note">Cette page sera bientôt complétée.</p>

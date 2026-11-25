@@ -77,7 +77,19 @@ final class PageController extends Controller
             'isNewsList' => $isNewsList,
             'isNewsItem' => $parentPath === Pages::NEWS_PATH,
             'news' => $path === '/' ? self::latestNews(3) : [],
+            'infos' => $path === '/' ? self::homeInfos() : null,
         ]);
+    }
+
+    /** Encadré « Informations importantes » de l'accueil: ['id', 'html'] ou null. */
+    public static function homeInfos(): ?array
+    {
+        $p = Db::one('SELECT id, status, blocks FROM pages WHERE path = ?', [Pages::INFOS_PATH]);
+        if (!$p || ($p['status'] !== 'published' && !\App\Auth::isAdmin())) {
+            return null;
+        }
+        $html = trim(Blocks::render(Blocks::decode((string) $p['blocks'])));
+        return ['id' => (int) $p['id'], 'html' => $html];
     }
 
     /** Dernières actualités publiées (sous-pages de /actualites), la plus récente d'abord. */

@@ -669,6 +669,41 @@ main { padding-bottom: 3rem; }
 .page-head.has-photo .page-title, .page-head.has-photo .page-date, .page-head.has-photo .page-lead { color: #fff; text-shadow: 0 2px 18px rgba(0, 0, 0, .3); }
 .page-head.has-photo .breadcrumbs a, .page-head.has-photo .breadcrumbs li, .page-head.has-photo .breadcrumbs [aria-current] { color: #e3e9f6; }
 
+/* ---------- Accueil: informations importantes + actualités */
+.home-top { display: grid; gap: 1.75rem; padding-top: 2rem; padding-bottom: 1rem; }
+.home-top .news-home { padding: 0; min-width: 0; }
+.infos-panel {
+  position: relative; background: #fffaf0; border: 1px solid #f3dfb8; border-radius: 1.25rem;
+  padding: 1.25rem 1.25rem 1.1rem; box-shadow: 0 18px 40px -30px rgba(138, 75, 0, .55); overflow: hidden;
+}
+.infos-panel::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 5px; background: linear-gradient(90deg, var(--b-orange), var(--b-yellow)); }
+.infos-title { display: flex; align-items: center; gap: .6rem; margin: .15rem 0 .9rem; font-family: var(--font-display); font-size: 1.3rem; line-height: 1.2; color: var(--c-primary-dark); }
+.infos-icon { display: inline-grid; place-items: center; width: 2.3rem; height: 2.3rem; border-radius: 50%; background: var(--b-orange); color: #fff; flex: none; }
+.infos-body { font-size: .97rem; line-height: 1.5; }
+.infos-body .block { margin: 0 0 .8rem; }
+.infos-body .block:last-child { margin-bottom: 0; }
+.infos-body .block-heading h2, .infos-body .block-heading h3, .infos-body h3, .infos-body h4 { font-size: 1.05rem; margin: 1rem 0 .4rem; color: var(--c-warning); font-family: var(--font); font-weight: 750; letter-spacing: 0; }
+.infos-body > .block:first-child h2, .infos-body > .block:first-child h3 { margin-top: 0; }
+.infos-body .prose p { margin: 0 0 .55rem; }
+.infos-body .prose p:last-child { margin-bottom: 0; }
+.infos-body a { overflow-wrap: anywhere; }
+.infos-body img { border-radius: .75rem; max-width: 100%; height: auto; box-shadow: none; }
+.infos-body .block-image, .infos-body .block-image.image-half { float: none; width: 100%; max-width: 100%; margin-inline: 0; }
+.infos-body .block-callout { padding: .75rem; }
+.infos-body .block-files li a { padding: .55rem .7rem; }
+.infos-edit { margin: .9rem 0 0; font-weight: 650; font-size: .92rem; }
+@media (min-width: 64em) {
+  .home-top.has-infos { grid-template-columns: minmax(0, 1fr) 22rem; align-items: start; gap: 2.25rem; }
+  .home-top.has-infos .infos-panel { order: 2; }
+  .has-infos .news-grid-home { grid-template-columns: 1fr 1fr; grid-template-rows: auto; }
+  .has-infos .news-grid-home .is-featured { grid-column: 1 / -1; grid-row: auto; flex-direction: row; }
+  .has-infos .news-grid-home .is-featured .news-media { flex: 0 0 52%; aspect-ratio: auto; min-height: 17rem; }
+  .has-infos .news-grid-home .news-card:not(.is-featured) { flex-direction: column; }
+  .has-infos .news-grid-home .news-card:not(.is-featured) .news-media { flex: none; aspect-ratio: 16 / 9; min-height: 0; }
+  .has-infos .news-grid-home .news-card:nth-child(2):last-child { grid-column: 1 / -1; flex-direction: row; }
+  .has-infos .news-grid-home .news-card:nth-child(2):last-child .news-media { flex: 0 0 34%; aspect-ratio: auto; min-height: 10rem; }
+}
+
 /* ---------- Actualités */
 .section-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem; }
 .section-head .section-title { margin: 0; }
@@ -767,4 +802,17 @@ main { padding-bottom: 3rem; }
 @media print {
   .hero-art, .hero-hills, .rub-balloon, .page-head-art, .news-media, .site-footer::before, .page-head::before, .page-head::after { display: none !important; }
   .hero { padding: 0; }
+}
+
+/* ---------- Accueil: « L'ASIJ en bref » */
+.home-about { background: var(--c-surface); border-radius: 1.5rem; padding: clamp(1.25rem, 4vw, 2.75rem); }
+.home-about .section-title { margin-top: 0; }
+.home-about .blocks { max-width: none; }
+.home-about .prose { font-size: 1.1rem; line-height: 1.65; max-width: 62ch; }
+.home-about .prose p { margin: 0 0 .9rem; }
+.home-about .block-image img { box-shadow: 0 24px 48px -30px rgba(20, 36, 73, .55); }
+@media (min-width: 56em) {
+  .home-about .blocks { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); column-gap: clamp(2rem, 4vw, 3.5rem); row-gap: 0; align-items: start; }
+  .home-about .blocks > * { grid-column: 1; margin-top: 0; }
+  .home-about .blocks > .image-half { grid-column: 2; grid-row: 1 / span 8; align-self: center; max-width: none; margin: 0; }
 }

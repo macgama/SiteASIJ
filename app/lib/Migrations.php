@@ -10,7 +10,7 @@ namespace App;
  */
 final class Migrations
 {
-    public const VERSION = 4;
+    public const VERSION = 5;
 
     public static function run(): void
     {
@@ -267,6 +267,141 @@ final class Migrations
         ], 'id = :id', ['id' => (int) $home['id']]);
     }
 
+    /**
+     * Encadré « Informations importantes » de l'accueil (ancienne colonne de droite de Jimdo,
+     * importée en bas de la page Transports): page cachée éditable comme les autres.
+     * Retire aussi le titre « Bienvenue… » du texte d'accueil (il répète le grand titre).
+     */
+    private static function v5(): void
+    {
+        $admin = Db::value("SELECT id FROM users WHERE role = 'admin' ORDER BY id LIMIT 1");
+        $admin = $admin !== null ? (int) $admin : null;
+        $enc = fn(array $b) => json_encode(array_values($b), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+        if (Db::value('SELECT id FROM pages WHERE path = ?', [Pages::INFOS_PATH]) === null) {
+            $blocks = self::sidebarFromTransports();
+            if (!$blocks) {
+                $blocks = [
+                    ['type' => 'heading', 'data' => ['text' => 'Informations Transports', 'level' => 3]],
+                    ['type' => 'text', 'data' => ['html' => '<p>Horaires des bus de ligne&nbsp;: <a href="https://www.tp-info.ch/fr/horaire-actuel/rechercher-un-tableau-horaire#/" target="_blank" rel="noopener noreferrer">tp-info.ch</a></p>'
+                        . '<p>Horaires des transports scolaires&nbsp;: <a href="https://www.ecolesdujorat.ch/transports/horaires/" target="_blank" rel="noopener noreferrer">ecolesdujorat.ch</a></p>'
+                        . '<p>Horaires, changements de bus, trajets UAPE&nbsp;: <a href="mailto:asij@helvecie.ch">asij@helvecie.ch</a></p>'
+                        . '<p>Problèmes sur le terrain et coordination ASIJ – HelvéCie&nbsp;: <strong>M. Louis Meyer</strong>, directeur d’exploitation, <a href="tel:0793376507">079 337 65 07</a></p>']],
+                ];
+            }
+            foreach ($blocks as &$b) {
+                $b = ['id' => Pages::newBlockId()] + $b;
+            }
+            unset($b);
+            Db::insert('pages', [
+                'parent_id' => null,
+                'slug' => ltrim(Pages::INFOS_PATH, '/'),
+                'path' => Pages::INFOS_PATH,
+                'title' => 'Informations importantes',
+                'menu_title' => null,
+                'meta_description' => 'Informations urgentes et importantes affichées sur la page d’accueil.',
+                'blocks' => $enc($blocks),
+                'status' => 'published',
+                'show_in_menu' => 0,
+                'sort_order' => 2 + (int) Db::value('SELECT COALESCE(MAX(sort_order), 0) FROM pages WHERE parent_id IS NULL'),
+                'updated_at' => Db::now(),
+                'updated_by' => $admin,
+            ]);
+        }
+
+        // E-mail du contact masqué par Cloudflare lors de l'import: on le relit dans la version gardée
+        $home = Db::one("SELECT * FROM pages WHERE path = '/'");
+        if (!$home) {
+            return;
+        }
+        if (trim(Settings::get('contact_email')) === '') {
+            $sources = array_merge([(string) $home['blocks']], array_column(Db::all('SELECT blocks FROM page_revisions WHERE page_id = ? ORDER BY id DESC LIMIT 5', [(int) $home['id']]), 'blocks'));
+            foreach ($sources as $json) {
+                foreach ((array) json_decode($json, true) as $b) {
+                    $h = (string) ($b['data']['html'] ?? '');
+                    if ($h !== '' && preg_match('/contact/i', $h) && ($c = self::parseContact($h))['email'] !== '') {
+                        Settings::set('contact_email', $c['email']);
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        $blocks = json_decode((string) $home['blocks'], true);
+        if (!is_array($blocks) || !$blocks) {
+            return;
+        }
+        $blocks = array_values($blocks);
+        $changed = false;
+        foreach ($blocks as $k => $b) {
+            if (($b['type'] ?? '') === 'heading') {
+                if (preg_match('/^\s*bienvenue/iu', (string) ($b['data']['text'] ?? ''))) {
+                    array_splice($blocks, $k, 1);
+                    $changed = true;
+                }
+                break;
+            }
+            if (($b['type'] ?? '') === 'text') {
+                $h = (string) ($b['data']['html'] ?? '');
+                $new = preg_replace('#^\s*<h[2-4][^>]*>(?:(?!</h[2-4]>).)*bienvenue(?:(?!</h[2-4]>).)*</h[2-4]>#isu', '', $h, 1) ?? $h;
+                if ($new !== $h) {
+                    $blocks[$k]['data']['html'] = Html::tidy($new);
+                    $changed = true;
+                }
+                break;
+            }
+        }
+        if ($changed) {
+            Db::insert('page_revisions', [
+                'page_id' => (int) $home['id'], 'title' => $home['title'], 'blocks' => $home['blocks'],
+                'created_at' => Db::now(), 'created_by' => null,
+            ]);
+            Db::update('pages', ['blocks' => $enc($blocks), 'updated_at' => Db::now(), 'updated_by' => $admin ?? $home['updated_by']], 'id = :id', ['id' => (int) $home['id']]);
+        }
+    }
+
+    /** Encadré transports ajouté par l'import en bas de la page Transports (copie, l'original reste). */
+    private static function sidebarFromTransports(): array
+    {
+        $page = Db::one("SELECT blocks FROM pages WHERE path = '/transports-scolaires'")
+            ?? Db::one("SELECT blocks FROM pages WHERE parent_id IS NULL AND LOWER(title) LIKE '%transport%' ORDER BY sort_order LIMIT 1");
+        $blocks = $page ? json_decode((string) $page['blocks'], true) : null;
+        if (!is_array($blocks)) {
+            return [];
+        }
+        $blocks = array_values($blocks);
+        $at = null;
+        foreach ($blocks as $k => $b) {
+            if (($b['type'] ?? '') === 'callout' && preg_match('/transport/iu', (string) ($b['data']['title'] ?? ''))) {
+                $at = $k; // le dernier trouvé
+            }
+        }
+        if ($at === null) {
+            return [];
+        }
+        $c = $blocks[$at]['data'];
+        $html = Html::cfDecode((string) ($c['html'] ?? ''));
+        $html = preg_replace('/Les\s+informations?\s+urgentes\s+et\s+importantes\s*:?/iu', '', $html) ?? $html;
+        // lien dont le texte (tp-info.ch) ne correspond pas à la cible sur l'ancien site
+        $html = preg_replace_callback('#<a\b([^>]*)href="[^"]*"([^>]*)>\s*(https?://[^<\s]+)\s*</a>#i', fn($m) => '<a' . $m[1] . 'href="' . $m[3] . '"' . $m[2] . '>' . preg_replace('/^www\./', '', (string) parse_url(html_entity_decode($m[3]), PHP_URL_HOST)) . '</a>', $html) ?? $html;
+        $out = [['type' => 'heading', 'data' => ['text' => (string) ($c['title'] ?? 'Informations Transports'), 'level' => 3]]];
+        if (trim(strip_tags(Html::tidy($html))) !== '') {
+            $out[] = ['type' => 'text', 'data' => ['html' => Html::tidy($html)]];
+        }
+        for ($k = $at + 1; $k < count($blocks); $k++) {
+            $b = $blocks[$k];
+            if (!in_array($b['type'] ?? '', ['image', 'files', 'gallery', 'button', 'video'], true)) {
+                break;
+            }
+            unset($b['id']);
+            if ($b['type'] === 'image') {
+                $b['data']['width'] = 'full';
+            }
+            $out[] = $b;
+        }
+        return $out;
+    }
+
     /** Texte brut d'un bloc titre/texte/encadré. */
     private static function plain(array $b): string
     {
@@ -283,6 +418,7 @@ final class Migrations
     public static function parseContact(string $html): array
     {
         $out = ['name' => '', 'role' => '', 'email' => '', 'phone' => ''];
+        $html = Html::cfDecode($html);
         if (preg_match('#mailto:([^"\'?\s>]+@[^"\'?\s>]+)#i', $html, $m)) {
             $out['email'] = rawurldecode($m[1]);
         }
