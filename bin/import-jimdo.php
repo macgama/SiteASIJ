@@ -800,7 +800,21 @@ final class JimdoImporter
         }
         // Titre: premier h1 du contenu s'il est court (sinon c'est une phrase d'accroche,
         // gardée comme intertitre), puis <title>, puis libellé du menu. Accueil: jamais le h1.
-        foreach ($blocks as $i => $b) {
+        // Le libellé du menu sert de titre: sur Jimdo, le premier h1 est souvent un intertitre
+        // ou une actualité (« Ordre du jour de la prochaine séance », « Juillet 2019 »…), gardé dans le contenu.
+        $nav = $legacy !== '/' ? trim((string) ($this->navTitle[$legacy] ?? '')) : '';
+        if ($nav !== '') {
+            $title = $nav;
+            foreach ($blocks as $i => $b) {
+                if ($b['type'] === 'heading' && !empty($b['h1'])) {
+                    if (mb_strtolower(trim($b['data']['text'])) === mb_strtolower($nav)) {
+                        unset($blocks[$i]);
+                    }
+                    break;
+                }
+            }
+        }
+        foreach ($title !== '' ? [] : $blocks as $i => $b) {
             if ($legacy !== '/' && $b['type'] === 'heading' && !empty($b['h1']) && mb_strlen($b['data']['text']) <= 70) {
                 $title = $b['data']['text'];
                 unset($blocks[$i]);

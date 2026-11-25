@@ -5,7 +5,7 @@ use App\Blocks;
 
 $style = Blocks::str($data, 'style') === 'warning' ? 'warning' : 'info';
 $title = Blocks::str($data, 'title');
-$html = App\Html::tidy(App\Html::cfDecode(Blocks::str($data, 'html'))); // nettoyé par Html::clean()
+$html = App\Html::display(Blocks::str($data, 'html')); // nettoyé par Html::clean()
 if ($title === '' && $html === '') {
     return;
 }

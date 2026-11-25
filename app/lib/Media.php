@@ -90,6 +90,18 @@ final class Media
         return STORAGE . '/media/' . basename((string) ($m['stored_name'] ?? ''));
     }
 
+    /** Largeur et hauteur d'origine d'une image (null si illisible), mémorisées par requête. */
+    public static function dimensions(array $m): ?array
+    {
+        static $cache = [];
+        $id = (int) $m['id'];
+        if (!array_key_exists($id, $cache)) {
+            $info = self::isImage($m) ? @getimagesize(self::path($m)) : false;
+            $cache[$id] = $info ? ['w' => (int) $info[0], 'h' => (int) $info[1]] : null;
+        }
+        return $cache[$id];
+    }
+
     public static function isImage(array $m): bool
     {
         return in_array((string) ($m['mime'] ?? ''), self::INLINE_IMAGES, true);

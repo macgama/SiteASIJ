@@ -140,8 +140,9 @@ return [
 
     'Migration: page de texte (titre, blocs, colonnes, vidéo, bouton)' => function () {
         $p = migration_page('/présentation/');
-        check($p['title'] === '10 communes pour favoriser une meilleure scolarité', 'titre = h1: ' . $p['title']);
-        check($p['menu_title'] === 'Présentation', 'titre de menu');
+        check($p['title'] === 'Présentation' && $p['menu_title'] === null, 'titre = libellé du menu: ' . $p['title']);
+        check($p['b'][0]['data']['text'] === '10 communes pour favoriser une meilleure scolarité', 'h1 gardé en intertitre');
+        array_shift($p['b']);
         check($p['path'] === '/presentation' && $p['slug'] === 'presentation', 'chemin ' . $p['path']);
         check($p['status'] === 'published' && (int) $p['show_in_menu'] === 1);
         check(str_starts_with((string) $p['meta_description'], 'Présentation'), 'meta description');
@@ -165,14 +166,14 @@ return [
     },
 
     'Migration: liens internes réécrits' => function () {
-        $html = migration_page('/présentation/')['b'][0]['data']['html'];
-        check(str_contains($html, 'href="/presentation/le-comite-de-direction"'), 'lien relatif encodé');
+        $html = migration_page('/présentation/')['b'][1]['data']['html'];
+        check(str_contains($html, 'href="/presentation/le-comite-de-direction"'), 'lien relatif encodé: ' . json_encode(array_column(migration_page('/présentation/')['b'], 'type')));
         check(str_contains($html, 'href="/presentation/le-conseil-intercommunal"'), 'lien absolu www.asij.ch');
         check(str_contains($html, 'href="/presentation/le-conseil-intercommunal/preavis-2026#oj"'), 'lien non encodé + ancre');
         check(str_contains($html, 'href="http://www.vd.ch/'), 'lien externe conservé');
         $p = migration_page('/présentation/');
-        check(str_contains($p['b'][2]['data']['html'], 'href="/transports-scolaires"'), 'lien dans une colonne');
-        check((bool) preg_match('#href="/media/\d+/[^"]+\.pdf"#', $p['b'][4]['data']['html']), 'lien /app/download/ -> média');
+        check(str_contains($p['b'][3]['data']['html'], 'href="/transports-scolaires"'), 'lien dans une colonne');
+        check((bool) preg_match('#href="/media/\d+/[^"]+\.pdf"#', $p['b'][5]['data']['html']), 'lien /app/download/ -> média');
         check(Db::value('SELECT COUNT(*) FROM media WHERE legacy_url = ?', ['https://www.asij.ch/app/download/17419337725/20180601_Statuts%2B+avenant+2018+approuv%C3%A9s.pdf']) == 1, 'statuts importés sans ?t=');
     },
 
@@ -195,8 +196,9 @@ return [
 
     'Migration: galerie et images (version originale)' => function () {
         $p = migration_page('/bâtiments-scolaires/photos-extension-2017/');
-        check($p['title'] === "Photos de l'extension 2017", $p['title']);
-        check(migration_types($p) === ['gallery', 'image', 'image', 'text'], implode(',', migration_types($p)));
+        check($p['title'] !== "Photos de l'extension 2017" && $p['b'][0]['data']['text'] === "Photos de l'extension 2017", $p['title']);
+        check(migration_types($p) === ['heading', 'gallery', 'image', 'image', 'text'], implode(',', migration_types($p)));
+        array_shift($p['b']);
         $g = $p['b'][0]['data'];
         check(count($g['items']) === 4, 'galerie de 4 images');
         check($g['items'][0]['caption'] === 'Façade sud' && $g['items'][1]['caption'] === '', 'légendes');

@@ -10,7 +10,7 @@ namespace App;
  */
 final class Migrations
 {
-    public const VERSION = 5;
+    public const VERSION = 6;
 
     public static function run(): void
     {
@@ -400,6 +400,31 @@ final class Migrations
             $out[] = $b;
         }
         return $out;
+    }
+
+    /**
+     * Pages importées dont le titre était le premier intertitre Jimdo (« Ordre du jour de la
+     * prochaine séance » pour la page CEt…): le libellé du menu devient le titre, l'ancien
+     * titre reste en tête du contenu. Pages modifiées dans l'administration: pas touchées.
+     */
+    private static function v6(): void
+    {
+        $rows = Db::all("SELECT id, title, menu_title, blocks FROM pages
+            WHERE legacy_url IS NOT NULL AND updated_by IS NULL AND path <> '/'
+              AND menu_title IS NOT NULL AND menu_title <> '' AND menu_title <> title");
+        foreach ($rows as $r) {
+            $blocks = json_decode((string) $r['blocks'], true);
+            $blocks = is_array($blocks) ? array_values($blocks) : [];
+            $first = $blocks[0] ?? null;
+            if (!($first && ($first['type'] ?? '') === 'heading' && trim((string) ($first['data']['text'] ?? '')) === trim((string) $r['title']))) {
+                array_unshift($blocks, ['id' => Pages::newBlockId(), 'type' => 'heading', 'data' => ['text' => (string) $r['title'], 'level' => 2]]);
+            }
+            Db::update('pages', [
+                'title' => mb_substr((string) $r['menu_title'], 0, 255),
+                'menu_title' => null,
+                'blocks' => json_encode($blocks, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ], 'id = :id', ['id' => (int) $r['id']]);
+        }
     }
 
     /** Texte brut d'un bloc titre/texte/encadré. */

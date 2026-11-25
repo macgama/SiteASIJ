@@ -90,6 +90,38 @@ final class Html
         return trim($html);
     }
 
+    /**
+     * Mise en forme à l'affichage: tableaux défilants sur mobile, première ligne en en-tête
+     * quand elle ne contient que du gras ou des majuscules (tableaux copiés de Jimdo).
+     */
+    public static function display(string $html): string
+    {
+        $html = self::tidy(self::cfDecode($html));
+        if (!str_contains($html, '<table')) {
+            return $html;
+        }
+        return preg_replace_callback('#<table\b[^>]*>.*?</table>#is', function ($m) {
+            $t = $m[0];
+            if (!str_contains($t, '<th') && preg_match('#<tr\b[^>]*>(.*?)</tr>#is', $t, $r)) {
+                preg_match_all('#<td\b[^>]*>(.*?)</td>#is', $r[1], $c);
+                $head = count($c[1]) > 1;
+                foreach ($c[1] as $cell) {
+                    $txt = trim(str_replace("\u{a0}", ' ', html_entity_decode(strip_tags($cell), ENT_QUOTES | ENT_HTML5, 'UTF-8')));
+                    $bold = (bool) preg_match('#^\s*(<p[^>]*>\s*)?<(strong|b)\b#i', $cell);
+                    $upper = $txt !== '' && mb_strtoupper($txt) === $txt && preg_match('/\p{L}/u', $txt);
+                    if ($txt !== '' && !$bold && !$upper) {
+                        $head = false;
+                    }
+                }
+                if ($head) {
+                    $row = preg_replace('#<td\b#i', '<td class="is-head"', $r[0]) ?? $r[0];
+                    $t = substr_replace($t, $row, (int) strpos($t, $r[0]), strlen($r[0]));
+                }
+            }
+            return '<div class="table-wrap">' . $t . '</div>';
+        }, $html) ?? $html;
+    }
+
     private static function walk(\DOMNode $node): void
     {
         foreach (iterator_to_array($node->childNodes) as $child) {

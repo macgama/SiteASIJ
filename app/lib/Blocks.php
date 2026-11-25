@@ -21,10 +21,54 @@ final class Blocks
     public static function render(array $blocks): string
     {
         $out = '';
+        $row = [];
+        $flush = function () use (&$row, &$out): void {
+            if (count($row) > 1) {
+                $out .= '<div class="block image-row">' . implode('', $row) . '</div>';
+            } elseif ($row) {
+                $out .= $row[0];
+            }
+            $row = [];
+        };
+        // séparateurs en double, en tête ou en fin (pages importées): ignorés
+        $blocks = array_values(array_filter($blocks, 'is_array'));
+        $keep = [];
         foreach ($blocks as $b) {
+            $sep = ($b['type'] ?? '') === 'separator';
+            if ($sep && ($keep === [] || (end($keep)['type'] ?? '') === 'separator')) {
+                continue;
+            }
+            $keep[] = $b;
+        }
+        while ($keep && (end($keep)['type'] ?? '') === 'separator') {
+            array_pop($keep);
+        }
+        foreach ($keep as $b) {
+            // petites images qui se suivent (QR codes, logos…) : côte à côte
+            if (is_array($b) && ($b['type'] ?? '') === 'image' && self::isSmallImage($b)) {
+                $row[] = self::renderOne($b);
+                continue;
+            }
+            $flush();
             $out .= self::renderOne($b);
         }
+        $flush();
         return $out;
+    }
+
+    /** Image dont la taille d'origine est petite (≤ 420 px de large). */
+    public static function isSmallImage(array $b): bool
+    {
+        $m = Media::find((int) ($b['data']['media_id'] ?? 0));
+        $d = $m ? Media::dimensions($m) : null;
+        return $d !== null && ($d['w'] <= 420 || self::isSquareGraphic($m, $d));
+    }
+
+    /** PNG/GIF carré: QR code ou pictogramme, à ne pas afficher en pleine largeur. */
+    public static function isSquareGraphic(array $m, ?array $d): bool
+    {
+        return $d !== null && $d['h'] > 0 && in_array($m['mime'], ['image/png', 'image/gif'], true)
+            && $d['w'] / $d['h'] > 0.85 && $d['w'] / $d['h'] < 1.18;
     }
 
     /** Rend un bloc isolé (utile pour l'aperçu de l'éditeur). */
