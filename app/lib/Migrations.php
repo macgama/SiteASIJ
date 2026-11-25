@@ -10,7 +10,7 @@ namespace App;
  */
 final class Migrations
 {
-    public const VERSION = 9;
+    public const VERSION = 10;
 
     public static function run(): void
     {
@@ -859,8 +859,8 @@ final class Migrations
         $html = Html::cfDecode($html);
         $org = [];
         $html = preg_replace_callback('#<(em|i)\b[^>]*>(.*?)</\1>#is', function ($m) use (&$org) {
-            $t = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
-            if ($t !== '') {
+            $t = trim(html_entity_decode(strip_tags($m[2]), ENT_QUOTES | ENT_HTML5, 'UTF-8'), " \t\n\r\0\x0B\u{a0},;:-–");
+            if ($t !== '' && preg_match('/\p{L}/u', $t)) {
                 $org[] = $t;
             }
             return ' ';
@@ -876,7 +876,7 @@ final class Migrations
         if (!$hasCiv && !$upper) {
             return null;
         }
-        $bits = array_values(array_filter(array_map('trim', explode(',', $t)), fn($x) => $x !== ''));
+        $bits = array_values(array_filter(array_map('trim', explode(',', $t)), fn($x) => (bool) preg_match('/\p{L}/u', $x)));
         $name = array_shift($bits) ?? '';
         $words = preg_split('/\s+/u', $name) ?: [];
         if (count($words) < 2 || count($words) > 6) {
@@ -902,6 +902,78 @@ final class Migrations
             $s = preg_replace_callback('/(?<=[-\s])(Le|La|Les|De|Du|Des|Sur|Sous|En)(?=[-\s])/u', fn($m) => mb_strtolower($m[1]), $s) ?? $s;
         }
         return $s;
+    }
+
+    /**
+     * Cartes « Personnes »: virgules et espaces parasites retirés. Page CEt: le dessin sous
+     * droits d'auteur (filigrane 123RF) est remplacé par une illustration créée pour le site;
+     * le remplacement est mémorisé pour qu'un nouvel import ne remette pas l'ancienne image.
+     */
+    private static function v10(): void
+    {
+        $clean = fn(string $v) => trim(preg_replace('/^[\s\x{a0},;:.\-–]+|[\s\x{a0},;:\-–]+$/u', '', preg_replace('/(?:\s*,\s*){2,}/u', ', ', $v) ?? $v) ?? $v);
+        foreach (Db::all("SELECT id, blocks FROM pages WHERE blocks LIKE '%\"people\"%'") as $p) {
+            $blocks = json_decode((string) $p['blocks'], true);
+            if (!is_array($blocks)) {
+                continue;
+            }
+            $changed = false;
+            foreach ($blocks as &$b) {
+                if (($b['type'] ?? '') !== 'people' || !is_array($b['data']['items'] ?? null)) {
+                    continue;
+                }
+                foreach ($b['data']['items'] as &$it) {
+                    foreach (['name', 'role', 'commune'] as $k) {
+                        $v = $clean((string) ($it[$k] ?? ''));
+                        if ($v !== ($it[$k] ?? '')) {
+                            $it[$k] = $v;
+                            $changed = true;
+                        }
+                    }
+                }
+                unset($it);
+            }
+            unset($b);
+            if ($changed) {
+                Db::update('pages', ['blocks' => json_encode($blocks, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)], 'id = :id', ['id' => (int) $p['id']]);
+            }
+        }
+
+        $cet = Db::one("SELECT id, blocks FROM pages WHERE path = '/cet'");
+        $src = dirname(__DIR__, 2) . '/resources/illustrations/reunion.png';
+        if (!$cet || !is_file($src)) {
+            return;
+        }
+        $old = [];
+        foreach ((array) json_decode((string) $cet['blocks'], true) as $b) {
+            if (($b['type'] ?? '') === 'image' && !empty($b['data']['media_id'])) {
+                $old[] = (int) $b['data']['media_id'];
+            }
+        }
+        if (!$old) {
+            return;
+        }
+        $tmp = sys_get_temp_dir() . '/asij-reunion-' . bin2hex(random_bytes(4)) . '.png';
+        copy($src, $tmp);
+        $m = Controllers\AdminMediaController::store(['name' => 'illustration-reunion-cet.png', 'tmp_name' => $tmp, 'error' => UPLOAD_ERR_OK, 'size' => (int) filesize($tmp)], false);
+        @unlink($tmp);
+        Db::update('media', ['alt' => 'Illustration : une réunion autour d’une table', 'title' => 'Illustration réunion (libre de droits, créée pour le site)'], 'id = :id', ['id' => (int) $m['id']]);
+        $map = json_decode(Settings::get('media_replacements') ?: '{}', true);
+        $map = is_array($map) ? $map : [];
+        foreach ($old as $o) {
+            $map[(string) $o] = (int) $m['id'];
+        }
+        Settings::set('media_replacements', json_encode($map));
+        foreach (Db::all('SELECT id, blocks FROM pages') as $p) {
+            $json = (string) $p['blocks'];
+            $new = $json;
+            foreach ($old as $o) {
+                $new = preg_replace('/"media_id":' . $o . '(?=[,}])/', '"media_id":' . (int) $m['id'], $new) ?? $new;
+            }
+            if ($new !== $json) {
+                Db::update('pages', ['blocks' => $new], 'id = :id', ['id' => (int) $p['id']]);
+            }
+        }
     }
 
     /** Texte brut d'un bloc titre/texte/encadré. */

@@ -695,7 +695,10 @@ final class JimdoImporter
         $imgId = preg_match('#/image/(i[0-9a-f]+)/#', $url, $m) ? $m[1] : substr(sha1($url), 0, 12);
         $label = trim($alt !== '' ? $alt : $caption);
         $base = $label !== '' ? (self::localSlugify($label) ?: 'image') : 'image';
-        return $this->media($url, 'image', $label, $alt, mb_substr($base, 0, 60) . '-' . $imgId . '.jpg');
+        $id = $this->media($url, 'image', $label, $alt, mb_substr($base, 0, 60) . '-' . $imgId . '.jpg');
+        // images remplacées dans l'administration (ex. image sous droits d'auteur): on garde le remplacement
+        $map = json_decode(\App\Settings::get('media_replacements') ?: '{}', true);
+        return ($id !== null && is_array($map) && isset($map[(string) $id])) ? (int) $map[(string) $id] : $id;
     }
 
     private function importLogo(): void
